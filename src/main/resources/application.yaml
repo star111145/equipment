@@ -1,0 +1,17 @@
+server:
+  port: 8100 # 后端服务端口，自定义
+  servlet:
+    context-path: /api # 接口前缀，后续前端请求统一加/api，便于跨域配置
+spring:
+  application:
+    name: equipment # 项目名，和Artifact一致
+  # Spring Security基础配置（仅骨架，无校验逻辑）
+  security:
+    user:
+      name: admin # 临时测试账号
+      password: 123456 # 临时测试密码
+# 日志配置（便于后续调试）
+logging:
+  level:
+    com.swpu: info # 自己的包名，日志级别info
+    org.springframework: warn
