@@ -1,4 +1,38 @@
 package com.swpu.equipment.user.service;
 
-public interface UserService {
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.swpu.equipment.user.entity.User;
+import com.swpu.equipment.user.entity.UserLoginDTO;
+
+
+/**
+ * 用户业务层接口
+ */
+public interface UserService extends IService<User> {
+    /**
+     * 用户登录
+     * @param loginDTO 登录参数
+     * @return 登录成功的用户信息
+     */
+    User login(UserLoginDTO loginDTO);
+
+    /**
+     * 校验用户是否为管理员
+     * @param userId 用户ID
+     * @return true=管理员 false=普通用户
+     */
+    boolean isAdmin(Long userId);
+
+    /**
+     * 根据用户名查询用户
+     * @param username 用户名
+     * @return 用户信息
+     */
+    User getUserByUsername(String username);
+
+
+    boolean saveUser(User user);
+
+
+    boolean isTeacher(Long userId);
 }

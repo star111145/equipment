@@ -5,13 +5,41 @@ server:
 spring:
   application:
     name: equipment # 项目名，和Artifact一致
-  # Spring Security基础配置（仅骨架，无校验逻辑）
-  security:
-    user:
-      name: admin # 临时测试账号
-      password: 123456 # 临时测试密码
-# 日志配置（便于后续调试）
+# 数据库配置，现本地配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/equipment_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+
+#  # Spring Security基础配置（仅骨架，无校验逻辑）
+#  security:
+#    user:
+#      name: admin # 临时测试账号
+#      password: 123456 # 临时测试密码
+
+# JWT配置（Token工具类用）
+jwt:
+  secret: swpu-equipment-2026-admin-987654321 # 生产环境改复杂点
+  expire: 7200000 # Token过期时间（2小时，单位：毫秒）
+
+# 日志配置
 logging:
   level:
-    com.swpu: info # 自己的包名，日志级别info
-    org.springframework: warn
+    root: INFO # 全局日志级别
+    com.swpu.equipment: DEBUG # 你的项目包，打印更详细日志
+    com.swpu.equipment.common.util.TokenUtil: INFO # 强制TokenUtil打印INFO日志
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n" # 控制台日志格式
+
+# MyBatis-Plus核心配置（扫描XML+下划线转驼峰）
+mybatis-plus:
+  # 扫描所有模块的XML映射文件（resources/mapper/**/*.xml 匹配所有子文件夹下的XML）
+  mapper-locations: classpath:mapper/**/*.xml
+  # 实体类别名包（可选，简化XML中的类名）
+  type-aliases-package: com.swpu.equipment.*.entity
+  configuration:
+    # 下划线转驼峰（数据库字段user_name → 实体类属性userName）
+    map-underscore-to-camel-case: true
+    # 打印SQL日志（开发环境用，生产环境关闭）
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl

@@ -1,33 +1,86 @@
 package com.swpu.equipment.user.controller;
 
+import com.swpu.equipment.common.result.Result;
+import com.swpu.equipment.common.util.TokenUtil;
+import com.swpu.equipment.user.entity.User;
+import com.swpu.equipment.user.entity.UserLoginDTO;
+import com.swpu.equipment.user.service.UserService;
+import jakarta.servlet.http.HttpSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
- * 自定义登录页Controller
+ * 登录Controller
  */
 @RestController
-@RequestMapping("") // 为匹配context-path: /api，或者不写避免重复
+// 关键：不配置@RequestMapping前缀，依赖context-path: /api
 public class LoginController {
+    // 增加Controller日志，排查请求是否到达
+    private static final Logger log = LoggerFactory.getLogger(LoginController.class);
 
-    // 匹配自定义登录页路径 /login
-    @GetMapping("/login")
-    public String defaultLoginPage() {
-        // 简单返回登录提示（毕设中可替换为HTML登录页）
-        return "<h1>自定义登录页</h1>" +
-                "<form action='/api/login' method='post'>" +
-                "用户名：<input type='text' name='username'><br>" +
-                "密码：<input type='password' name='password'><br>" +
-                "<button type='submit'>登录</button>" +
-                "</form>";
+    @Autowired
+    private UserService userService;
+
+    // 强制注入TokenUtil，若注入失败会直接报错（便于排查）
+    @Autowired
+    private TokenUtil tokenUtil;
+
+    // ========== 统一登录接口（最终路径：http://localhost:8100/api/login） ==========
+    @PostMapping("/login")
+    public Result<Map<String, Object>> login(
+            @RequestBody UserLoginDTO loginDTO,
+            HttpSession session) {
+        // 第一步：打印请求日志，确认请求到达Controller
+        log.info("接收到登录请求：username={}", loginDTO.getUsername());
+        try {
+            // 1. 调用Service校验数据库用户
+            User user = userService.login(loginDTO);
+            log.info("用户登录成功：username={}, userId={}", user.getUsername(), user.getId());
+
+            // 2. 生成Token（强制打印日志）
+            String token = tokenUtil.generateToken(user.getId());
+            log.info("生成Token成功：{}", token); // 手动打印，不依赖TokenUtil内部日志
+
+            // 3. 组装返回数据
+            Map<String, Object> data = new HashMap<>();
+            data.put("token", token);
+            data.put("userId", user.getId());
+            data.put("username", user.getUsername());
+            data.put("realName", user.getRealName());
+            data.put("role", user.getRole());
+
+            // 4. 存入Session
+            session.setAttribute("loginUser", user);
+
+            return Result.success(data);
+        } catch (IllegalArgumentException e) {
+            log.error("登录失败（业务异常）：{}", e.getMessage());
+            return Result.error(401, e.getMessage());
+        } catch (Exception e) {
+            log.error("登录失败（系统异常）", e); // 打印完整异常堆栈
+            return Result.error(500, "登录失败：" + e.getMessage());
+        }
     }
 
-    // 登录提交接口（POST）
-    @PostMapping("/login")
-    public String loginSubmit(@RequestParam String username, @RequestParam String password) {
-        if ("admin".equals(username) && "123456".equals(password)) {
-            return "登录成功！<br><a href='/api/user/test'>访问用户测试接口</a>";
-        } else {
-            return "用户名或密码错误！<br><a href='/api/login'>返回登录页</a>";
+    @PostMapping("/logout")
+    public Result<Void> logout(HttpSession session) {
+        try {
+            session.removeAttribute("loginUser");
+            return Result.success();
+        } catch (Exception e) {
+            log.error("退出登录失败", e);
+            return Result.error("退出登录失败：" + e.getMessage());
         }
+    }
+
+    @GetMapping("/test")
+    public Result<String> test() {
+        log.info("测试接口被调用");
+        return Result.success("测试接口返回成功");
     }
 }
