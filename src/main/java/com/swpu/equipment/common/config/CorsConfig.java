@@ -14,7 +14,7 @@ public class CorsConfig {
         CorsConfiguration config = new CorsConfiguration();
         // Spring Boot 3 推荐用originPatterns，兼容所有前端域名
        // config.addAllowedOriginPattern("*");
-        config.addAllowedOrigin("http://localhost:8090");
+        config.addAllowedOrigin("http://localhost:8090");//指定前端服务器地址
         // 允许所有请求方法（GET/POST/PUT/DELETE）
         config.addAllowedMethod("*");
         // 允许所有请求头
