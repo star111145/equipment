@@ -36,11 +36,11 @@ public class LoginController {
             @RequestBody UserLoginDTO loginDTO,
             HttpSession session) {
         // 第一步：打印请求日志，确认请求到达Controller
-        log.info("接收到登录请求：username={}", loginDTO.getUsername());
+        log.info("接收到登录请求：identifier={}", loginDTO.getIdentifier());
         try {
             // 1. 调用Service校验数据库用户
             User user = userService.login(loginDTO);
-            log.info("用户登录成功：username={}, userId={}", user.getUsername(), user.getId());
+            log.info("用户登录成功：identifier={}, userId={}", user.getStudentId(), user.getId());
 
             // 2. 生成Token（强制打印日志）
             String token = tokenUtil.generateToken(user.getId());
@@ -53,6 +53,7 @@ public class LoginController {
             data.put("username", user.getUsername());
             data.put("realName", user.getRealName());
             data.put("role", user.getRole());
+            data.put("isAdministrator", user.isAdmin());
 
             // 4. 存入Session
             session.setAttribute("loginUser", user);
@@ -71,7 +72,8 @@ public class LoginController {
     public Result<Void> logout(HttpSession session) {
         try {
             session.removeAttribute("loginUser");
-            return Result.success();
+         log.info("用户退出登录成功");   
+         return Result.success();      
         } catch (Exception e) {
             log.error("退出登录失败", e);
             return Result.error("退出登录失败：" + e.getMessage());

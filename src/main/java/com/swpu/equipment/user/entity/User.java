@@ -14,7 +14,13 @@ public class User {
     private Long id;
 
     /**
-     * 用户名（学号/工号）
+     * 学号/工号（登录账号）
+     */
+    @TableField("student_id")
+    private String studentId;
+
+    /**
+     * 用户名（昵称）
      */
     private String username;
 
@@ -26,7 +32,18 @@ public class User {
     /**
      * 真实姓名
      */
+    @TableField("real_name")
     private String realName;
+
+    /**
+     * 性别：1男 2女 0未知
+     */
+    private Integer gender;
+
+    /**
+     * 头像URL
+     */
+    private String avatar;
 
     // 核心：枚举字段，MyBatis-Plus会自动转换为String存储
     private UserRole role; // 数据库中存储的是"student"/"teacher"/"admin"

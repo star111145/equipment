@@ -24,6 +24,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**") // 拦截所有接口
                 .excludePathPatterns( // 排除无需拦截的接口（登录/注册/静态资源）
                         "/login",
+                        "/logout",
                         "/register",
                         "/swagger-ui/**",
                         "/v3/api-docs/**",

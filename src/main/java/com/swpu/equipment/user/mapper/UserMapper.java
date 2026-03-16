@@ -10,9 +10,9 @@ import org.apache.ibatis.annotations.Mapper;
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
     /**
-     * 根据用户名查询用户
-     * @param username 用户名（学号/工号）
+     * 根据学号/工号/手机号查询用户
+     * @param identifier 学号/工号/手机号
      * @return 用户信息
      */
-    User selectByUsername(String username);
+    User selectByIdentifier(String identifier);
 }

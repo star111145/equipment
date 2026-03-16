@@ -24,11 +24,11 @@ public interface UserService extends IService<User> {
     boolean isAdmin(Long userId);
 
     /**
-     * 根据用户名查询用户
-     * @param username 用户名
+     * 根据标识符查询用户
+     * @param identifier 学号/工号/手机号
      * @return 用户信息
      */
-    User getUserByUsername(String username);
+    User getUserByIdentifier(String identifier);
 
 
     boolean saveUser(User user);

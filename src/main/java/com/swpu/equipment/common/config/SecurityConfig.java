@@ -52,10 +52,10 @@ public class SecurityConfig {
                 )
                 // 保留登录页（可选，后续测试登录功能）
                 .formLogin()
-                .loginPage("/api/login") // 自定义登录页路径（避免和业务接口冲突，同时与接口前缀保持一致）
-                .permitAll() // 放行登录页
-                .and()
-                .logout().permitAll(); // 放行登出接口
+                .disable()
+                .logout()
+                .logoutUrl("/api/logout")
+                .permitAll();
 
         return http.build();
     }

@@ -23,9 +23,9 @@ class UserControllerTest {
     @Test
     void generateBcryptPassword() {
         // 1. 待加密的明文密码（测试用：123456）
-        String rawPassword = "123456";
+        String rawPassword = "123456Aa";
 
-        // 2. 生成加密串（每次生成结果不同，但都能验证123456）
+        // 2. 生成加密串（每次生成结果不同，但都能验证123456Aa）
         String encodedPassword = passwordEncoder.encode(rawPassword);
 
         // 3. 打印加密结果（复制此结果到INSERT SQL中）
@@ -44,9 +44,9 @@ class UserControllerTest {
     void batchGeneratePassword() {
         // 定义测试用户：用户名 + 明文密码
         String[][] testUsers = {
-                {"admin", "123456"},       // 管理员
-                {"teacher01", "123456"},   // 教师
-                {"student01", "123456"}    // 学生
+                {"admin", "123456Aa"},       // 管理员
+                {"teacher01", "123456Aa"},   // 教师
+                {"student01", "123456Aa"}    // 学生
         };
 
         // 批量生成加密密码

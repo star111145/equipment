@@ -39,24 +39,44 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public User login(UserLoginDTO loginDTO) {
         Assert.notNull(loginDTO, "登录参数不能为空");
-        Assert.hasText(loginDTO.getUsername().trim(), "用户名不能为空");
+        Assert.hasText(loginDTO.getIdentifier().trim(), "登录标识符不能为空");
         Assert.hasText(loginDTO.getPassword().trim(), "密码不能为空");
 
-        User user = userMapper.selectByUsername(loginDTO.getUsername().trim());
-        Assert.notNull(user, "用户名不存在或账号已禁用");
+        User user = userMapper.selectByIdentifier(loginDTO.getIdentifier().trim());
+        Assert.notNull(user, "用户不存在或账号已禁用");
 // 校验用户状态（可选，确保未禁用）
         Assert.isTrue(1 == user.getStatus(), "账号已被禁用");
         boolean passwordMatch = passwordEncoder.matches(loginDTO.getPassword(), user.getPassword());
         Assert.isTrue(passwordMatch, "密码错误，请重新输入");
+        
+        // 校验登录角色
+        String selectedRole = loginDTO.getRole();
+        boolean userIsAdmin = user.isAdmin();
+        
+        // 添加日志调试
+        System.out.println("【登录调试】标识符: " + loginDTO.getIdentifier());
+        System.out.println("【登录调试】选择的角色: " + selectedRole);
+        System.out.println("【登录调试】用户是否为管理员: " + userIsAdmin);
+        
+        // 如果用户是管理员，但选择了普通用户登录，提示错误
+        if (userIsAdmin && "user".equals(selectedRole)) {
+            throw new IllegalArgumentException("您是管理员，请使用管理员身份登录");
+        }
+        
+        // 如果用户不是管理员，但选择了管理员登录，拒绝访问
+        if (!userIsAdmin && "admin".equals(selectedRole)) {
+            throw new IllegalArgumentException("您不是管理员，无权进入管理员页面");
+        }
+        
 //清空密码
         user.setPassword(null);
         return user;
     }
 
     @Override
-    public User getUserByUsername(String username) {
-        Assert.hasText(username.trim(), "用户名不能为空");
-        User user = userMapper.selectByUsername(username.trim());
+    public User getUserByIdentifier(String identifier) {
+        Assert.hasText(identifier.trim(), "标识符不能为空");
+        User user = userMapper.selectByIdentifier(identifier.trim());
         if (user != null) {
             user.setPassword(null);
         }
