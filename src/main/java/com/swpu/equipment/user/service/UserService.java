@@ -1,5 +1,6 @@
 package com.swpu.equipment.user.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.swpu.equipment.user.entity.User;
 import com.swpu.equipment.user.entity.UserLoginDTO;
@@ -35,4 +36,12 @@ public interface UserService extends IService<User> {
 
 
     boolean isTeacher(Long userId);
+
+    /**
+     * 分页查询用户列表
+     * @param page 分页对象
+     * @param keyword 搜索关键词
+     * @return 分页结果
+     */
+    IPage<User> getUserPage(IPage<User> page, String keyword);
 }

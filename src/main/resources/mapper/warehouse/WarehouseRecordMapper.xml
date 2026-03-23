@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.swpu.equipment.warehouse.mapper.WarehouseRecordMapper">
+
+    <resultMap id="WarehouseRecordVOResultMap" type="com.swpu.equipment.warehouse.entity.WarehouseRecordVO">
+        <id property="id" column="id"/>
+        <result property="equipmentId" column="equipment_id"/>
+        <result property="equipmentNumber" column="equipment_number"/>
+        <result property="equipmentName" column="equipment_name"/>
+        <result property="warehouseId" column="warehouse_id"/>
+        <result property="warehouseName" column="warehouse_name"/>
+        <result property="supplierId" column="supplier_id"/>
+        <result property="supplierName" column="supplier_name"/>
+        <result property="recordType" column="record_type"/>
+        <result property="typeText" column="type_text"/>
+        <result property="quantity" column="quantity"/>
+        <result property="operatorId" column="operator_id"/>
+        <result property="operatorName" column="operator_name"/>
+        <result property="remark" column="remark"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <select id="getRecordPage" resultMap="WarehouseRecordVOResultMap">
+        SELECT 
+            wr.id,
+            wr.equipment_id,
+            e.equipment_number,
+            e.equipment_name,
+            wr.warehouse_id,
+            w.warehouse_name,
+            wr.supplier_id,
+            s.supplier_name,
+            wr.record_type,
+            CASE 
+                WHEN wr.record_type = 1 THEN '入库'
+                WHEN wr.record_type = 2 THEN '出库'
+                ELSE ''
+            END AS type_text,
+            wr.quantity,
+            wr.operator_id,
+            u.real_name AS operator_name,
+            wr.remark,
+            wr.create_time
+        FROM warehouse_record wr
+        LEFT JOIN equipment e ON wr.equipment_id = e.id
+        LEFT JOIN warehouse w ON wr.warehouse_id = w.id
+        LEFT JOIN supplier s ON wr.supplier_id = s.id
+        LEFT JOIN sys_user u ON wr.operator_id = u.id
+        <where>
+            <if test="equipmentId != null">
+                AND wr.equipment_id = #{equipmentId}
+            </if>
+            <if test="warehouseId != null">
+                AND wr.warehouse_id = #{warehouseId}
+            </if>
+            <if test="supplierId != null">
+                AND wr.supplier_id = #{supplierId}
+            </if>
+            <if test="recordType != null">
+                AND wr.record_type = #{recordType}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (e.equipment_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR e.equipment_number LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY wr.create_time DESC
+    </select>
+
+</mapper>

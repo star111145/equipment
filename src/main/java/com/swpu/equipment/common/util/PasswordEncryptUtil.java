@@ -1,6 +1,5 @@
 package com.swpu.equipment.common.util;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -13,7 +12,6 @@ public class PasswordEncryptUtil {
     private final PasswordEncoder passwordEncoder;
 
     // 注入Spring容器中的PasswordEncoder（已在SecurityConfig中配置）
-    @Autowired
     public PasswordEncryptUtil(PasswordEncoder passwordEncoder) {
         this.passwordEncoder = passwordEncoder;
     }

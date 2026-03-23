@@ -2,8 +2,6 @@ package com.swpu.equipment.user.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.swpu.equipment.common.annotation.RequireAdmin;
 import com.swpu.equipment.common.result.Result;
 import com.swpu.equipment.common.util.PasswordEncryptUtil;
 import com.swpu.equipment.common.util.TokenUtil;
@@ -13,10 +11,17 @@ import com.swpu.equipment.user.entity.UserPasswordDTO;
 import com.swpu.equipment.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.util.Assert;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 // 接口路径：/api/user（匹配yaml的context-path: /api）
@@ -30,6 +35,8 @@ public class UserController {
     private TokenUtil tokenUtil;
     @Autowired
     private PasswordEncryptUtil passwordEncryptUtil;
+    @Value("${upload.base-dir:src/main/resources/static/uploads}")
+    private String uploadBaseDir;
 
     @GetMapping("/test")
     public String test() {
@@ -57,7 +64,6 @@ public class UserController {
         Long userId = tokenUtil.getUserIdFromToken(token);
         User user = userService.getById(userId);
         
-        Assert.notNull(user, "用户不存在");
         
         UserProfileDTO profile = new UserProfileDTO();
         profile.setUsername(user.getUsername());
@@ -95,7 +101,7 @@ public class UserController {
 
     // 管理员更新个人信息
     @PutMapping("/admin/profile")
-    @RequireAdmin
+    @PreAuthorize("hasAuthority('admin')")
     public Result<Void> updateAdminProfile(@RequestBody UserProfileDTO profile, HttpServletRequest request) {
         String token = request.getHeader("Authorization");
         Long userId = tokenUtil.getUserIdFromToken(token);
@@ -141,7 +147,7 @@ public class UserController {
 
     // 管理员专属接口：添加@RequireAdmin注解
     @PostMapping("/add")
-    @RequireAdmin(message = "新增用户仅管理员可操作")
+    @PreAuthorize("hasAuthority('admin')")
     public Result<Boolean> addUser(@RequestBody User user) {
         try {
             boolean success = userService.saveUser(user);
@@ -153,7 +159,7 @@ public class UserController {
 
     // 管理员专属接口：删除单个用户
     @DeleteMapping("/{userId}")
-    @RequireAdmin
+    @PreAuthorize("hasAuthority('admin')")
     public Result<Void> deleteUser(@PathVariable Long userId) {
         try {
             boolean success = userService.removeById(userId);
@@ -165,41 +171,25 @@ public class UserController {
 
     // 管理员专属接口：批量删除用户
     @DeleteMapping("/batch")
-    @RequireAdmin
+    @PreAuthorize("hasAuthority('admin')")
     public boolean batchDelete(@RequestParam List<Long> userIds) {
         return userService.removeByIds(userIds);
     }
 
     // 管理员专属接口：获取用户列表（分页）
     @GetMapping("/list")
-    @RequireAdmin
+    @PreAuthorize("hasAuthority('admin')")
     public Result<IPage<User>> getUserList(@RequestParam(defaultValue = "1") Integer current,
                                          @RequestParam(defaultValue = "10") Integer size,
                                          @RequestParam(required = false) String keyword) {
         Page<User> page = new Page<>(current, size);
-        
-        // 如果有搜索关键词，使用条件查询
-        if (keyword != null && !keyword.trim().isEmpty()) {
-            LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-            wrapper.like(User::getStudentId, keyword)
-                   .or()
-                   .like(User::getRealName, keyword)
-                   .or()
-                   .like(User::getEmail, keyword)
-                   .or()
-                   .like(User::getPhone, keyword);
-            IPage<User> result = userService.page(page, wrapper);
-            return Result.success(result);
-        }
-        
-        // 无搜索关键词，返回全部用户
-        IPage<User> result = userService.page(page, null);
+        IPage<User> result = userService.getUserPage(page, keyword);
         return Result.success(result);
     }
 
     // 管理员专属接口：获取所有用户ID（用于全选功能）
     @GetMapping("/all-ids")
-    @RequireAdmin
+    @PreAuthorize("hasAuthority('admin')")
     public Result<List<Long>> getAllUserIds() {
         try {
             List<User> users = userService.list();
@@ -212,7 +202,7 @@ public class UserController {
 
     // 管理员专属接口：获取用户详情
     @GetMapping("/{userId}")
-    @RequireAdmin
+    @PreAuthorize("hasAuthority('admin')")
     public Result<User> getUserDetail(@PathVariable Long userId) {
         User user = userService.getById(userId);
         if (user == null) {
@@ -223,7 +213,7 @@ public class UserController {
 
     // 管理员专属接口：更新用户信息
     @PutMapping("/{userId}")
-    @RequireAdmin
+    @PreAuthorize("hasAuthority('admin')")
     public Result<Void> updateUser(@PathVariable Long userId, @RequestBody User user) {
         user.setId(userId);
         try {
@@ -236,7 +226,7 @@ public class UserController {
 
     // 管理员专属接口：重置用户密码
     @PutMapping("/{userId}/reset-password")
-    @RequireAdmin
+    @PreAuthorize("hasAuthority('admin')")
     public Result<Void> resetPassword(@PathVariable Long userId, @RequestBody UserPasswordDTO passwordDTO) {
         User user = userService.getById(userId);
         if (user == null) {
@@ -247,12 +237,80 @@ public class UserController {
         return success ? Result.success() : Result.error("重置失败");
     }
 
+    // // 管理员专属接口：禁用/启用用户
+    // @PutMapping("/{userId}/toggle-status")
+    // @RequireAdmin
+    // public Result<Void> toggleStatus(@PathVariable Long userId, HttpServletRequest request) {
+    //     // 1. 获取当前登录用户（防止禁用自己）
+    //     String token = request.getHeader("Authorization");
+    //     Long currentUserId = tokenUtil.getUserIdFromToken(token);
+    //     if (currentUserId == null) {
+    //         return Result.error("未登录");
+    //     }
+        
+    //     if (currentUserId.equals(userId)) {
+    //         return Result.error("不能禁用自己");
+    //     }
+        
+    //     User user = userService.getById(userId);
+    //     if (user == null) {
+    //         return Result.error("用户不存在");
+    //     }
+        
+    //     // 2. 不能禁用管理员
+    //     if (user.isAdmin()) {
+    //         return Result.error("不能禁用管理员");
+    //     }
+        
+    //     user.setStatus(user.getStatus() == 1 ? 0 : 1);
+    //     boolean success = userService.updateById(user);
+    //     return success ? Result.success() : Result.error("操作失败");
+    // }
+
     // 管理员专属接口：批量添加用户
     @PostMapping("/batch")
-    @RequireAdmin
+    @PreAuthorize("hasAuthority('admin')")
     public Result<Void> batchAddUsers(@RequestBody List<User> users) {
         boolean success = userService.saveBatch(users);
         return success ? Result.success() : Result.error("添加失败");
+    }
+
+    //上传用户头像
+    @PostMapping("/upload-avatar")
+    public Result<String> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        try {
+            // 使用配置文件中的上传目录
+            String uploadDir = Paths.get(uploadBaseDir, "users").toString();
+            File dir = new File(uploadDir);
+            System.out.println("上传目录: " + dir.getAbsolutePath());
+            System.out.println("目录是否存在: " + dir.exists());
+            if (!dir.exists()) {
+                System.out.println("创建目录: " + dir.mkdirs());
+            }
+
+            String originalFilename = file.getOriginalFilename();
+            if (originalFilename == null) {
+                return Result.error("文件名不能为空");
+            }
+
+            String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            String newFilename = UUID.randomUUID().toString().replace("-", "") + extension;
+
+            File uploadedFile = new File(dir, newFilename);
+            System.out.println("上传文件: " + uploadedFile.getAbsolutePath());
+            System.out.println("文件是否存在: " + uploadedFile.exists());
+            // 复制文件到目标目录
+            // 代替file.transferTo(uploadedFile);
+            Files.copy(file.getInputStream(), uploadedFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            System.out.println("文件复制后是否存在: " + uploadedFile.exists());
+
+            String avatarUrl = "/uploads/users/" + newFilename;
+            System.out.println("返回的 avatarUrl: " + avatarUrl);
+            return Result.success(avatarUrl);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("上传失败: " + e.getMessage());
+        }
     }
 
 

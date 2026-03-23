@@ -1,5 +1,6 @@
 package com.swpu.equipment.user.service.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.swpu.equipment.user.entity.User;
 import com.swpu.equipment.user.entity.UserLoginDTO;
@@ -7,6 +8,7 @@ import com.swpu.equipment.user.entity.UserLoginDTO;
 import com.swpu.equipment.user.entity.UserRole;
 import com.swpu.equipment.user.mapper.UserMapper;
 import com.swpu.equipment.user.service.UserService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -115,5 +117,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user = this.getById(userId);
         Assert.notNull(user, "用户ID：" + userId + " 不存在");
         return user.isTeacher();
+    }
+
+    @Override
+    public IPage<User> getUserPage(IPage<User> page, String keyword) {
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            wrapper.like(User::getStudentId, keyword)
+                   .or()
+                   .like(User::getRealName, keyword)
+                   .or()
+                   .like(User::getEmail, keyword)
+                   .or()
+                   .like(User::getPhone, keyword);
+        }
+        return this.page(page, wrapper);
     }
 }

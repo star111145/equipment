@@ -2,15 +2,14 @@ package com.swpu.equipment.common.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 //Spring Security基础配置
 /**
@@ -18,6 +17,7 @@ import org.springframework.security.web.SecurityFilterChain;
  */
 @Configuration
 @EnableWebSecurity // 启用Web安全（3.x无需@EnableGlobalMethodSecurity）
+@EnableMethodSecurity(prePostEnabled = true) // 启用方法级安全（替代@EnableGlobalMethodSecurity）
 public class SecurityConfig {
 
     /**
@@ -33,49 +33,71 @@ public class SecurityConfig {
     /**
      * 安全过滤链（替代旧的WebSecurityConfigurerAdapter）
      * 配置接口权限、跨域、CSRF等
+     * 替换旧语法（已弃用）为新语法（Spring Security 6.1+）
+     * 
+     * http
+     *     .cors().and()
+     *     .csrf().disable()
+     *     .authorizeHttpRequests(auth -> auth
+     *         .requestMatchers("/api/**").permitAll()
+     *         .anyRequest().permitAll()
+     *     )
+     *     .formLogin()
+     *     .disable()
+     *     .logout()
+     *     .logoutUrl("/api/logout")
+     *     .permitAll();
+     * 
      */
+    //新语法（Spring Security 6.1+）
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+            TokenAuthenticationFilter tokenAuthenticationFilter,
+            CorsConfigurationSource corsConfigurationSource) throws Exception {
         http
-                // 启用跨域配置（关联CorsConfig）
-                .cors().and()
+                // 启用跨域配置（使用CorsConfig中的CorsConfigurationSource）
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // 开发阶段关闭CSRF（简化前端请求）
-                .csrf().disable()
+                .csrf(csrf -> csrf.disable())
                 // 权限规则配置
                 .authorizeHttpRequests(auth -> auth
-                        // 放行所有/api开头的接口（开发阶段，后续可精细化）
-                        .requestMatchers("/api/**").permitAll()
-//                        // 其他所有请求需要认证（不适用）
-//                        .anyRequest().authenticated()
-                        // 兜底规则：其他请求也放行（避免任何重定向）
-                        .anyRequest().permitAll()
+                        // 放行静态资源、登录、注册等无需权限的接口
+                        .requestMatchers("/login", "/logout", "/register").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/error").permitAll()
+                        .requestMatchers("/api/uploads/**", "/uploads/**").permitAll()
+                        // 其他请求需要认证
+                        .anyRequest().authenticated()
                 )
-                // 保留登录页（可选，后续测试登录功能）
-                .formLogin()
-                .disable()
-                .logout()
-                .logoutUrl("/api/logout")
-                .permitAll();
-
+                // 禁用表单登录（使用Token认证）
+                .formLogin(formLogin -> formLogin.disable())
+                // 禁用HTTP Basic认证
+                .httpBasic(httpBasic -> httpBasic.disable())
+                .logout(logout -> logout
+                        .logoutUrl("/api/logout")
+                        .permitAll()
+                )
+                // 添加自定义认证过滤器
+                .addFilterBefore(tokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            
         return http.build();
     }
 
-    /**
-     * 内存用户配置（测试用，后续替换为数据库用户）
-     * 密码通过passwordEncoder加密，匹配你yaml中的admin/123456
-     */
-    @Bean
-    public UserDetailsService userDetailsService() {
-        // 加密密码：123456 → 加密后存储（避免明文）
-        String encodedPassword = passwordEncoder().encode("123456");
+    // /**
+    //  * 内存用户配置（测试用，后续替换为数据库用户）
+    //  * 密码通过passwordEncoder加密，匹配你yaml中的admin/123456
+    //  */
+    // @Bean
+    // public UserDetailsService userDetailsService() {
+    //     // 加密密码：123456 → 加密后存储（避免明文）
+    //     String encodedPassword = passwordEncoder().encode("123456");
 
-        // 创建admin用户，赋予ADMIN角色
-        UserDetails admin = User.withUsername("admin")
-                .password(encodedPassword) // 加密后的密码
-                .roles("ADMIN") // 角色配置
-                .build();
+    //     // 创建admin用户，赋予ADMIN角色
+    //     UserDetails admin = User.withUsername("admin")
+    //             .password(encodedPassword) // 加密后的密码
+    //             .roles("ADMIN") // 角色配置
+    //             .build();
 
-        // 内存用户管理器
-        return new InMemoryUserDetailsManager(admin);
-    }
+    //     // 内存用户管理器
+    //     return new InMemoryUserDetailsManager(admin);
+    // }
 }

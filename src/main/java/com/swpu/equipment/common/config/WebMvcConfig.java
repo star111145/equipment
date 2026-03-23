@@ -1,34 +1,24 @@
 package com.swpu.equipment.common.config;
 
-import com.swpu.equipment.common.interceptor.AdminAuthInterceptor;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 //web配置
 /**
- * Web配置：注册拦截器
+ * Web配置：配置静态资源映射
  */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
-    @Autowired
-    private AdminAuthInterceptor adminAuthInterceptor;
+    @Value("${upload.base-dir:src/main/resources/static/uploads}")
+    //上传文件的目录
+    private String uploadBaseDir;
 
-    /**
-     * 注册管理员权限拦截器
-     */
+    //配置静态资源映射，如上传的二维码图片
     @Override
-    public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(adminAuthInterceptor)
-                .addPathPatterns("/**") // 拦截所有接口
-                .excludePathPatterns( // 排除无需拦截的接口（登录/注册/静态资源）
-                        "/login",
-                        "/logout",
-                        "/register",
-                        "/swagger-ui/**",
-                        "/v3/api-docs/**",
-                        "/error"
-                );
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        registry.addResourceHandler("/uploads/**")  //处理前端上传的文件
+                .addResourceLocations("file:" + uploadBaseDir + "/");  //映射到后端上传的文件目录  
     }
 }

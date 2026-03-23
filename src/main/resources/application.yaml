@@ -32,6 +32,10 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n" # 控制台日志格式
 
+# 文件上传配置
+upload:
+  base-dir: src/main/resources/static/uploads
+
 # MyBatis-Plus核心配置（扫描XML+下划线转驼峰）
 mybatis-plus:
   # 扫描所有模块的XML映射文件（resources/mapper/**/*.xml 匹配所有子文件夹下的XML）

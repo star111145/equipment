@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.swpu.equipment.equipment.mapper.EquipmentMapper">
+
+    <resultMap id="EquipmentVOResultMap" type="com.swpu.equipment.equipment.entity.EquipmentVO">
+        <id property="id" column="id"/>
+        <result property="equipmentNumber" column="equipment_number"/>
+        <result property="equipmentName" column="equipment_name"/>
+        <result property="equipmentType" column="equipment_type"/>
+        <result property="equipmentStatus" column="equipment_status"/>
+        <result property="equipmentLocation" column="warehouse_name"/>
+        <result property="stockQuantity" column="stock_quantity"/>
+        <result property="description" column="description"/>
+        <result property="supplier" column="supplier_name"/>
+        <result property="equipmentImage" column="equipment_image"/>
+        <result property="qrcodeUrl" column="qrcode_url"/>
+    </resultMap>
+
+    <select id="getEquipmentPage" resultMap="EquipmentVOResultMap">
+        SELECT 
+            e.id,
+            e.equipment_number,
+            e.equipment_name,
+            et.type_name AS equipment_type,
+            e.equipment_status,
+            e.stock_quantity,
+            e.description,
+            w.warehouse_name,
+            s.supplier_name,
+            e.equipment_image,
+            e.qrcode_url
+        FROM equipment e
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN warehouse w ON e.warehouse_id = w.id
+        LEFT JOIN supplier s ON e.supplier_id = s.id
+        <where>
+            <if test="keyword != null and keyword != ''">
+                (
+                    e.equipment_number LIKE CONCAT('%', #{keyword}, '%')
+                    OR e.equipment_name LIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
+            <if test="equipmentType != null and equipmentType != ''">
+                AND et.type_name = #{equipmentType}
+            </if>
+        </where>
+        ORDER BY e.create_time DESC
+    </select>
+
+    <select id="getEquipmentById" resultMap="EquipmentVOResultMap">
+        SELECT 
+            e.id,
+            e.equipment_number,
+            e.equipment_name,
+            et.type_name AS equipment_type,
+            e.equipment_status,
+            e.stock_quantity,
+            e.description,
+            w.warehouse_name,
+            s.supplier_name,
+            e.equipment_image,
+            e.qrcode_url
+        FROM equipment e
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN warehouse w ON e.warehouse_id = w.id
+        LEFT JOIN supplier s ON e.supplier_id = s.id
+        WHERE e.id = #{id}
+    </select>
+
+    <select id="getEquipmentTypes" resultType="string">
+        SELECT DISTINCT et.type_name
+        FROM equipment_type et
+        INNER JOIN equipment e ON et.id = e.equipment_type_id
+        ORDER BY et.type_name
+    </select>
+
+</mapper>
