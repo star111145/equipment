@@ -5,6 +5,15 @@ server:
 spring:
   application:
     name: equipment # 项目名，和Artifact一致
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss # 日期格式，与前端一致
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+  mvc:
+    date-format: yyyy-MM-dd HH:mm:ss
 # 数据库配置，现本地配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver

@@ -6,10 +6,16 @@
         <id property="id" column="id"/>
         <result property="equipmentNumber" column="equipment_number"/>
         <result property="equipmentName" column="equipment_name"/>
+        <result property="equipmentModel" column="equipment_model"/>
         <result property="equipmentType" column="equipment_type"/>
+        <result property="equipmentTypeId" column="equipment_type_id"/>
         <result property="equipmentStatus" column="equipment_status"/>
         <result property="equipmentLocation" column="warehouse_name"/>
         <result property="stockQuantity" column="stock_quantity"/>
+        <result property="availableQuantity" column="available_quantity"/>
+        <result property="borrowQuantity" column="borrow_quantity"/>
+        <result property="unavailableQuantity" column="unavailable_quantity"/>
+        <result property="reserveQuantity" column="reserve_quantity"/>
         <result property="description" column="description"/>
         <result property="supplier" column="supplier_name"/>
         <result property="equipmentImage" column="equipment_image"/>
@@ -21,9 +27,15 @@
             e.id,
             e.equipment_number,
             e.equipment_name,
+            e.equipment_model,
             et.type_name AS equipment_type,
+            e.equipment_type_id,
             e.equipment_status,
             e.stock_quantity,
+            e.stock_quantity - COALESCE(borrow.borrow_quantity, 0) - COALESCE(unavailable.unavailable_quantity, 0) AS available_quantity,
+            COALESCE(borrow.borrow_quantity, 0) AS borrow_quantity,
+            COALESCE(unavailable.unavailable_quantity, 0) AS unavailable_quantity,
+            COALESCE(reserve.reserve_quantity, 0) AS reserve_quantity,
             e.description,
             w.warehouse_name,
             s.supplier_name,
@@ -33,6 +45,26 @@
         LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
         LEFT JOIN warehouse w ON e.warehouse_id = w.id
         LEFT JOIN supplier s ON e.supplier_id = s.id
+        LEFT JOIN (
+            SELECT equipment_id, COALESCE(SUM(borrow_quantity), 0) AS borrow_quantity
+            FROM equipment_borrow
+            WHERE audit_status = 1 AND borrow_status = 1
+            AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1 AND er.audit_result != '报修通过自动归还')
+            GROUP BY equipment_id
+        ) borrow ON e.id = borrow.equipment_id
+        LEFT JOIN (
+            SELECT equipment_id, COALESCE(SUM(repair_quantity), 0) AS unavailable_quantity
+            FROM equipment_repair
+            WHERE repair_status = 1 AND audit_status = 1
+            GROUP BY equipment_id
+        ) unavailable ON e.id = unavailable.equipment_id
+        LEFT JOIN (
+            SELECT equipment_id, COUNT(*) AS reserve_quantity
+            FROM equipment_reservation
+            WHERE reserve_status = 1 AND audit_status = 1
+            AND DATE_ADD(reserve_time, INTERVAL reserve_duration HOUR) > NOW()
+            GROUP BY equipment_id
+        ) reserve ON e.id = reserve.equipment_id
         <where>
             <if test="keyword != null and keyword != ''">
                 (
@@ -52,9 +84,15 @@
             e.id,
             e.equipment_number,
             e.equipment_name,
+            e.equipment_model,
             et.type_name AS equipment_type,
+            e.equipment_type_id,
             e.equipment_status,
             e.stock_quantity,
+            e.stock_quantity - COALESCE(borrow.borrow_quantity, 0) - COALESCE(unavailable.unavailable_quantity, 0) AS available_quantity,
+            COALESCE(borrow.borrow_quantity, 0) AS borrow_quantity,
+            COALESCE(unavailable.unavailable_quantity, 0) AS unavailable_quantity,
+            COALESCE(reserve.reserve_quantity, 0) AS reserve_quantity,
             e.description,
             w.warehouse_name,
             s.supplier_name,
@@ -64,6 +102,26 @@
         LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
         LEFT JOIN warehouse w ON e.warehouse_id = w.id
         LEFT JOIN supplier s ON e.supplier_id = s.id
+        LEFT JOIN (
+            SELECT equipment_id, COALESCE(SUM(borrow_quantity), 0) AS borrow_quantity
+            FROM equipment_borrow
+            WHERE audit_status = 1 AND borrow_status = 1
+            AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1 AND er.audit_result != '报修通过自动归还')
+            GROUP BY equipment_id
+        ) borrow ON e.id = borrow.equipment_id
+        LEFT JOIN (
+            SELECT equipment_id, COALESCE(SUM(repair_quantity), 0) AS unavailable_quantity
+            FROM equipment_repair
+            WHERE repair_status = 1 AND audit_status = 1
+            GROUP BY equipment_id
+        ) unavailable ON e.id = unavailable.equipment_id
+        LEFT JOIN (
+            SELECT equipment_id, COUNT(*) AS reserve_quantity
+            FROM equipment_reservation
+            WHERE reserve_status = 1 AND audit_status = 1
+            AND DATE_ADD(reserve_time, INTERVAL reserve_duration HOUR) > NOW()
+            GROUP BY equipment_id
+        ) reserve ON e.id = reserve.equipment_id
         WHERE e.id = #{id}
     </select>
 

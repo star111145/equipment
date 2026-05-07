@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.swpu.equipment.lifecycle.mapper.EquipmentReturnMapper">
+
+    <resultMap id="ReturnVOResultMap" type="com.swpu.equipment.lifecycle.entity.EquipmentReturn">
+        <id property="id" column="id"/>
+        <result property="borrowId" column="borrow_id"/>
+        <result property="equipmentId" column="equipment_id"/>
+        <result property="equipmentNumber" column="equipment_number"/>
+        <result property="equipmentName" column="equipment_name"/>
+        <result property="equipmentModel" column="equipment_model"/>
+        <result property="equipmentImage" column="equipment_image"/>
+        <result property="equipmentTypeId" column="equipment_type_id"/>
+        <result property="equipmentType" column="equipment_type"/>
+        <result property="userId" column="user_id"/>
+        <result property="realName" column="real_name"/>
+        <result property="phone" column="phone"/>
+        <result property="purpose" column="purpose"/>
+        <result property="returnQuantity" column="return_quantity"/>
+        <result property="borrowQuantity" column="borrow_quantity"/>
+        <result property="repairQuantity" column="repair_quantity"/>
+        <result property="returnTime" column="return_time"/>
+        <result property="expectedReturnTime" column="expected_return_time"/>
+        <result property="actualReturnTime" column="actual_return_time"/>
+        <result property="returnStatus" column="return_status"/>
+        <result property="auditStatus" column="audit_status"/>
+        <result property="auditUserId" column="audit_user_id"/>
+        <result property="auditUserName" column="audit_user_name"/>
+        <result property="auditTime" column="audit_time"/>
+        <result property="auditResult" column="audit_result"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <select id="getPageListWithType" resultMap="ReturnVOResultMap">
+        SELECT 
+            r.id,
+            r.borrow_id,
+            r.equipment_id,
+            r.equipment_number,
+            r.equipment_name,
+            COALESCE(r.equipment_model, e.equipment_model) AS equipment_model,
+            COALESCE(r.equipment_image, e.equipment_image) AS equipment_image,
+            r.equipment_type_id,
+            et.type_name AS equipment_type,
+            r.user_id,
+            u.real_name AS real_name,
+            u.phone AS phone,
+            r.purpose,
+            r.return_quantity,
+            b.borrow_quantity + COALESCE((SELECT SUM(er.return_quantity) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1), 0) AS original_borrow_quantity,
+            b.borrow_quantity,
+            r.repair_quantity,
+            r.return_time,
+            r.expected_return_time,
+            r.actual_return_time,
+            r.return_status,
+            r.audit_status,
+            r.audit_user_id,
+            au.real_name AS audit_user_name,
+            r.audit_time,
+            r.audit_result,
+            r.create_time,
+            r.update_time
+        FROM equipment_return r
+        LEFT JOIN equipment e ON r.equipment_id = e.id
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN sys_user u ON r.user_id = u.id
+        LEFT JOIN sys_user au ON r.audit_user_id = au.id
+        LEFT JOIN equipment_borrow b ON r.borrow_id = b.id
+        <where>
+            <if test="userId != null">
+                AND r.user_id = #{userId}
+            </if>
+            <if test="status != null and status != -1">
+                AND r.return_status = #{status}
+            </if>
+            <if test="auditStatus != null and auditStatus != -1">
+                AND r.audit_status = #{auditStatus}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (r.equipment_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR r.equipment_number LIKE CONCAT('%', #{keyword}, '%')
+                     OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY r.create_time DESC
+    </select>
+    
+    <select id="countPendingReturns" resultType="java.lang.Integer">
+        SELECT COUNT(*) 
+        FROM equipment_return 
+        WHERE user_id = #{userId} 
+        AND equipment_id = #{equipmentId}
+        AND audit_status = 0
+    </select>
+
+</mapper>

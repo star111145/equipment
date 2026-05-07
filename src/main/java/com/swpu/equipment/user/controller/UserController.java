@@ -2,7 +2,7 @@ package com.swpu.equipment.user.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.swpu.equipment.common.result.Result;
+import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.common.util.PasswordEncryptUtil;
 import com.swpu.equipment.common.util.TokenUtil;
 import com.swpu.equipment.user.entity.User;
@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -62,8 +63,13 @@ public class UserController {
     public Result<UserProfileDTO> getProfile(HttpServletRequest request) {
         String token = request.getHeader("Authorization");
         Long userId = tokenUtil.getUserIdFromToken(token);
+        if (userId == null) {
+            return Result.error("无效的token");
+        }
         User user = userService.getById(userId);
-        
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
         
         UserProfileDTO profile = new UserProfileDTO();
         profile.setUsername(user.getUsername());
@@ -87,7 +93,13 @@ public class UserController {
     public Result<Void> updateProfile(@RequestBody UserProfileDTO profile, HttpServletRequest request) {
         String token = request.getHeader("Authorization");
         Long userId = tokenUtil.getUserIdFromToken(token);
+        if (userId == null) {
+            return Result.error("无效的token");
+        }
         User user = userService.getById(userId);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
         
         user.setUsername(profile.getUsername());
         user.setEmail(profile.getEmail());
@@ -105,7 +117,13 @@ public class UserController {
     public Result<Void> updateAdminProfile(@RequestBody UserProfileDTO profile, HttpServletRequest request) {
         String token = request.getHeader("Authorization");
         Long userId = tokenUtil.getUserIdFromToken(token);
+        if (userId == null) {
+            return Result.error("无效的token");
+        }
         User user = userService.getById(userId);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
         
         user.setUsername(profile.getUsername());
         user.setStudentId(profile.getStudentId());
@@ -125,7 +143,13 @@ public class UserController {
     public Result<Void> updatePassword(@RequestBody UserPasswordDTO passwordDTO, HttpServletRequest request) {
         String token = request.getHeader("Authorization");
         Long userId = tokenUtil.getUserIdFromToken(token);
+        if (userId == null) {
+            return Result.error("无效的token");
+        }
         User user = userService.getById(userId);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
         
         // 验证原密码
         if (!passwordEncryptUtil.matches(passwordDTO.getOldPassword(), user.getPassword())) {
@@ -312,6 +336,17 @@ public class UserController {
             return Result.error("上传失败: " + e.getMessage());
         }
     }
+
+     /**
+     * 获取管理员列表
+     */
+    @GetMapping("/managers")
+    @PreAuthorize("hasAuthority('admin')")
+    public Result<List<Map<String, Object>>> getManagers() {
+        List<Map<String, Object>> list = userService.getManagerOptions();
+        return Result.success(list);
+    }
+
 
 
 //

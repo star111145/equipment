@@ -1,6 +1,6 @@
 package com.swpu.equipment.user.controller;
 
-import com.swpu.equipment.common.result.Result;
+import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.common.util.TokenUtil;
 import com.swpu.equipment.user.entity.User;
 import com.swpu.equipment.user.entity.UserLoginDTO;
@@ -52,8 +52,10 @@ public class LoginController {
             data.put("userId", user.getId());
             data.put("username", user.getUsername());
             data.put("realName", user.getRealName());
+            data.put("phone", user.getPhone());
             data.put("role", user.getRole());
             data.put("isAdministrator", user.isAdmin());
+            data.put("tokenExpireTime", System.currentTimeMillis() + tokenUtil.getExpire());
 
             // 4. 存入Session
             session.setAttribute("loginUser", user);

@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.swpu.equipment.lifecycle.mapper.EquipmentReservationMapper">
+
+    <resultMap id="ReservationVOResultMap" type="com.swpu.equipment.lifecycle.entity.EquipmentReservationVO">
+        <id property="id" column="id"/>
+        <result property="equipmentId" column="equipment_id"/>
+        <result property="equipmentName" column="equipment_name"/>
+        <result property="equipmentNumber" column="equipment_number"/>
+        <result property="equipmentModel" column="equipment_model"/>
+        <result property="equipmentImage" column="equipment_image"/>
+        <result property="equipmentType" column="equipment_type"/>
+        <result property="userId" column="user_id"/>
+        <result property="userName" column="user_name"/>
+        <result property="userPhone" column="user_phone"/>
+        <result property="reserveTime" column="reserve_time"/>
+        <result property="reserveDuration" column="reserve_duration"/>
+        <result property="purpose" column="purpose"/>
+        <result property="reserveStatus" column="reserve_status"/>
+        <result property="auditStatus" column="audit_status"/>
+        <result property="auditUserId" column="audit_user_id"/>
+        <result property="auditUserName" column="audit_user_name"/>
+        <result property="auditTime" column="audit_time"/>
+        <result property="auditResult" column="audit_result"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="hasBorrow" column="has_borrow"/>
+        <result property="availableQuantity" column="available_quantity"/>
+        <result property="isExtension" column="is_extension"/>
+    </resultMap>
+    
+    <select id="getReservationById" resultMap="ReservationVOResultMap">
+        SELECT 
+            r.id,
+            r.equipment_id,
+            e.equipment_name,
+            e.equipment_number,
+            e.equipment_model,
+            e.equipment_image,
+            et.type_name as equipment_type,
+            r.user_id,
+            u.real_name as user_name,
+            u.phone as user_phone,
+            r.reserve_time,
+            r.reserve_duration,
+            r.purpose,
+            r.reserve_status,
+            r.audit_status,
+            r.audit_user_id,
+            au.real_name as audit_user_name,
+            r.audit_time,
+            r.audit_result,
+            r.create_time,
+            r.update_time,
+            r.is_extension
+        FROM equipment_reservation r
+        LEFT JOIN equipment e ON r.equipment_id = e.id
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN sys_user u ON r.user_id = u.id
+        LEFT JOIN sys_user au ON r.audit_user_id = au.id
+        WHERE r.id = #{id}
+    </select>
+
+    <select id="getPageList" resultMap="ReservationVOResultMap">
+        SELECT 
+            r.id,
+            r.equipment_id,
+            r.equipment_name,
+            r.equipment_number,
+            COALESCE(r.equipment_model, e.equipment_model) AS equipment_model,
+            COALESCE(r.equipment_image, e.equipment_image) AS equipment_image,
+            et.type_name AS equipment_type,
+            r.user_id,
+            u.real_name AS user_name,
+            u.phone AS user_phone,
+            r.reserve_time,
+            r.reserve_duration,
+            r.purpose,
+            r.reserve_status,
+            r.audit_status,
+            r.audit_user_id,
+            ru.real_name AS audit_user_name,
+            r.audit_time,
+            r.audit_result,
+            r.create_time,
+            r.update_time,
+            r.is_extension,
+            e.available_quantity
+        FROM equipment_reservation r
+        LEFT JOIN equipment e ON r.equipment_id = e.id
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN sys_user u ON r.user_id = u.id
+        LEFT JOIN sys_user ru ON r.audit_user_id = ru.id
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (r.equipment_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR r.equipment_number LIKE CONCAT('%', #{keyword}, '%')
+                     OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <if test="status != null and status != -1">
+                <if test="status == 1">
+                    AND r.reserve_status = 1 AND DATE_ADD(r.reserve_time, INTERVAL r.reserve_duration HOUR) > NOW()
+                </if>
+                <if test="status == 4">
+                    AND r.reserve_status = 1 AND DATE_ADD(r.reserve_time, INTERVAL r.reserve_duration HOUR) &lt; NOW()
+                </if>
+                <if test="status != 1 and status != 4">
+                    AND r.reserve_status = #{status}
+                </if>
+            </if>
+        </where>
+        ORDER BY r.create_time DESC
+    </select>
+    
+    <select id="getPageListByUserId" resultMap="ReservationVOResultMap">
+        SELECT 
+            r.id,
+            r.equipment_id,
+            r.equipment_name,
+            r.equipment_number,
+            COALESCE(r.equipment_model, e.equipment_model) AS equipment_model,
+            COALESCE(r.equipment_image, e.equipment_image) AS equipment_image,
+            et.type_name AS equipment_type,
+            r.user_id,
+            u.real_name AS user_name,
+            r.reserve_time,
+            r.reserve_duration,
+            r.purpose,
+            r.reserve_status,
+            r.audit_status,
+            r.audit_user_id,
+            ru.real_name AS audit_user_name,
+            r.audit_time,
+            r.audit_result,
+            r.create_time,
+            r.update_time,
+            r.is_extension,
+            e.available_quantity,
+            IF((SELECT COUNT(*) FROM equipment_borrow b WHERE b.reserve_id = r.id AND b.borrow_status = 1 AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1)) > 0, 1, 0) AS has_borrow
+        FROM equipment_reservation r
+        LEFT JOIN equipment e ON r.equipment_id = e.id
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN sys_user u ON r.user_id = u.id
+        LEFT JOIN sys_user ru ON r.audit_user_id = ru.id
+        <where>
+            r.user_id = #{userId}
+            <if test="keyword != null and keyword != ''">
+                AND (r.equipment_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR r.equipment_number LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <if test="status != null and status == 1">
+                AND r.reserve_status = 1 AND DATE_ADD(r.reserve_time, INTERVAL r.reserve_duration HOUR) > NOW()
+            </if>
+            <if test="status != null and status == 4">
+                AND r.reserve_status = 1 AND DATE_ADD(r.reserve_time, INTERVAL r.reserve_duration HOUR) &lt; NOW()
+            </if>
+            <if test="status != null and status != -1 and status != 1 and status != 4">
+                AND r.reserve_status = #{status}
+            </if>
+        </where>
+        ORDER BY r.create_time DESC
+    </select>
+
+    <select id="getCalendarReservations" resultMap="ReservationVOResultMap">
+        SELECT 
+            r.id,
+            r.equipment_id,
+            r.equipment_name,
+            r.equipment_number,
+            COALESCE(r.equipment_model, e.equipment_model) AS equipment_model,
+            COALESCE(r.equipment_image, e.equipment_image) AS equipment_image,
+            et.type_name AS equipment_type,
+            r.user_id,
+            u.real_name AS user_name,
+            u.phone AS user_phone,
+            r.reserve_time,
+            r.reserve_duration,
+            r.purpose,
+            r.reserve_status,
+            r.audit_status,
+            r.audit_user_id,
+            ru.real_name AS audit_user_name,
+            r.audit_time,
+            r.audit_result,
+            r.create_time,
+            r.update_time,
+            r.is_extension,
+            e.available_quantity
+        FROM equipment_reservation r
+        LEFT JOIN equipment e ON r.equipment_id = e.id
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN sys_user u ON r.user_id = u.id
+        LEFT JOIN sys_user ru ON r.audit_user_id = ru.id
+        WHERE r.equipment_id = #{equipmentId}
+        AND r.reserve_time <![CDATA[ < ]]> DATE_ADD(#{end}, INTERVAL 1 DAY)
+        AND DATE_ADD(r.reserve_time, INTERVAL r.reserve_duration HOUR) <![CDATA[ > ]]> #{start}
+        AND (r.audit_status = 0 OR (r.reserve_status = 1 AND DATE_ADD(r.reserve_time, INTERVAL r.reserve_duration HOUR) <![CDATA[ > ]]> NOW()))
+        ORDER BY r.reserve_time ASC
+    </select>
+</mapper>

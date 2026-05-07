@@ -8,13 +8,11 @@ import com.swpu.equipment.warehouse.entity.WarehouseVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import java.util.List;
-import java.util.Map;
+
 
 @Mapper
 public interface WarehouseMapper extends BaseMapper<Warehouse> {
     
     IPage<WarehouseVO> getWarehouseList(Page<WarehouseVO> page, @Param("keyword") String keyword);
-    
-    List<Map<String, Object>> getManagerOptions();
+     
 }

@@ -26,6 +26,12 @@ public class Equipment {
     private String equipmentName;
 
     /**
+     * 设备型号
+     */
+    @TableField("equipment_model")
+    private String equipmentModel;
+
+    /**
      * 设备图片URL
      */
     @TableField("equipment_image")
@@ -36,30 +42,67 @@ public class Equipment {
      */
     @TableField("equipment_type_id")
     private Long equipmentTypeId;
+    
+    /**
+     * 设备类型
+     */
+    @TableField(exist = false)
+    private String equipmentType;
 
     /**
-     * 设备状态：1正常 0故障
-     */
-    @TableField("equipment_status")
-    private Integer equipmentStatus;
+       * 设备状态（手动标记）：0-维修中 1-空闲（默认） 4-故障
+       * 说明：其他状态（2被预约、3已借用）通过动态计算得出，不使用此字段
+       */
+      @TableField("equipment_status")
+      private Integer equipmentStatus;
 
     /**
      * 仓库ID（外键）
      */
     @TableField("warehouse_id")
     private Long warehouseId;
+    
+    /**
+     * 仓库位置
+     */
+    @TableField(exist = false)
+    private String equipmentLocation;
 
     /**
      * 供应商ID（外键）
      */
     @TableField("supplier_id")
     private Long supplierId;
+    
+    /**
+     * 供应商
+     */
+    @TableField(exist = false)
+    private String supplier;
 
     /**
      * 库存数量
      */
     @TableField("stock_quantity")
     private Integer stockQuantity;
+
+    /**
+     * 可用数量
+     */
+    @TableField("available_quantity")
+    private Integer availableQuantity;
+
+    /**
+     * 借用数量（动态统计）
+     */
+    @TableField(exist = false)
+    private Integer borrowQuantity;
+
+    /**
+     * 维修数量（动态统计）
+     */
+    @TableField(exist = false)
+    private Integer repairQuantity;
 
     /**
      * 设备描述

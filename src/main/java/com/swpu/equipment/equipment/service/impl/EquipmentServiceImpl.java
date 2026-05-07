@@ -1,21 +1,39 @@
 package com.swpu.equipment.equipment.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.swpu.equipment.common.util.QrCodeUtil;
 import com.swpu.equipment.equipment.entity.Equipment;
 import com.swpu.equipment.equipment.entity.EquipmentVO;
+import com.swpu.equipment.equipment.export.EquipmentExcelData;
 import com.swpu.equipment.equipment.mapper.EquipmentMapper;
 import com.swpu.equipment.equipment.service.EquipmentService;
+import com.swpu.equipment.lifecycle.entity.EquipmentBorrow;
+import com.swpu.equipment.lifecycle.entity.EquipmentRepair;
+import com.swpu.equipment.lifecycle.mapper.EquipmentBorrowMapper;
+import com.swpu.equipment.lifecycle.mapper.EquipmentRepairMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment> implements EquipmentService {
+    
+    private static final Logger log = LoggerFactory.getLogger(EquipmentServiceImpl.class);
+    
+    @Autowired
+    private EquipmentBorrowMapper borrowMapper;
+    
+    @Autowired
+    private EquipmentRepairMapper repairMapper;
 
     @Transactional
     @Override
@@ -85,5 +103,197 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
     @Override
     public List<String> getEquipmentTypes() {
         return baseMapper.getEquipmentTypes();
+    }
+
+    @Override
+    public List<EquipmentExcelData> exportEquipmentList() {
+        List<Equipment> equipmentList = baseMapper.selectList(new LambdaQueryWrapper<>());
+        List<EquipmentExcelData> excelDataList = new ArrayList<>();
+        
+        for (Equipment equipment : equipmentList) {
+            EquipmentExcelData data = new EquipmentExcelData();
+            data.setEquipmentNumber(equipment.getEquipmentNumber());
+            data.setEquipmentName(equipment.getEquipmentName());
+            data.setEquipmentType(equipment.getEquipmentType() != null ? equipment.getEquipmentType() : "未设置");
+            
+            String statusText = "未知";
+            switch (equipment.getEquipmentStatus()) {
+                case 0: statusText = "维修中"; break;
+                case 1: statusText = "空闲"; break;
+                case 2: statusText = "被预约"; break;
+                case 3: statusText = "已借用"; break;
+                case 4: statusText = "故障"; break;
+            }
+            data.setEquipmentStatus(statusText);
+            
+            data.setEquipmentLocation(equipment.getEquipmentLocation() != null ? equipment.getEquipmentLocation() : "未设置");
+            data.setStockQuantity(equipment.getStockQuantity() != null ? equipment.getStockQuantity() : 0);
+            data.setSupplier(equipment.getSupplier() != null ? equipment.getSupplier() : "未设置");
+            data.setDescription(equipment.getDescription() != null ? equipment.getDescription() : "无");
+            
+            excelDataList.add(data);
+        }
+        
+        return excelDataList;
+    }
+
+    @Override
+    public List<EquipmentExcelData> exportSelectedEquipment(List<Long> equipmentIds) {
+        List<Equipment> equipmentList = baseMapper.selectBatchIds(equipmentIds);
+        List<EquipmentExcelData> excelDataList = new ArrayList<>();
+        
+        for (Equipment equipment : equipmentList) {
+            EquipmentExcelData data = new EquipmentExcelData();
+            data.setEquipmentNumber(equipment.getEquipmentNumber());
+            data.setEquipmentName(equipment.getEquipmentName());
+            data.setEquipmentType(equipment.getEquipmentType() != null ? equipment.getEquipmentType() : "未设置");
+            
+            String statusText = "未知";
+            switch (equipment.getEquipmentStatus()) {
+                case 0: statusText = "维修中"; break;
+                case 1: statusText = "空闲"; break;
+                case 2: statusText = "被预约"; break;
+                case 3: statusText = "已借用"; break;
+                case 4: statusText = "故障"; break;
+            }
+            data.setEquipmentStatus(statusText);
+            
+            data.setEquipmentLocation(equipment.getEquipmentLocation() != null ? equipment.getEquipmentLocation() : "未设置");
+            data.setStockQuantity(equipment.getStockQuantity() != null ? equipment.getStockQuantity() : 0);
+            data.setSupplier(equipment.getSupplier() != null ? equipment.getSupplier() : "未设置");
+            data.setDescription(equipment.getDescription() != null ? equipment.getDescription() : "无");
+            
+            excelDataList.add(data);
+        }
+        
+        return excelDataList;
+    }
+
+    @Override
+    public void calculateEquipmentStatus(Equipment equipment) {
+        Integer availableQuantity = equipment.getAvailableQuantity() != null ? equipment.getAvailableQuantity() : 0;
+        
+        Long borrowCount = borrowMapper.getBorrowQuantity(equipment.getId());
+        Long repairCount = repairMapper.getRepairQuantity(equipment.getId());
+        Long maintenanceCount = repairMapper.getMaintenanceQuantity(equipment.getId());
+        Boolean hasActiveReservation = baseMapper.hasActiveReservation(equipment.getId());
+        
+        if (repairCount > 0 && maintenanceCount == 0) {
+            equipment.setEquipmentStatus(4); // 故障
+        } else if (repairCount > 0 && maintenanceCount > 0) {
+            equipment.setEquipmentStatus(0); // 维修中
+        } else if (borrowCount != null && borrowCount > 0 && availableQuantity == 0) {
+            equipment.setEquipmentStatus(3); // 已借用
+        } else if (hasActiveReservation != null && hasActiveReservation && availableQuantity > 0) {
+            equipment.setEquipmentStatus(2); // 被预约
+        } else if (availableQuantity > 0) {
+            equipment.setEquipmentStatus(1); // 空闲
+        } else {
+            equipment.setEquipmentStatus(1); // 空闲
+        }
+    }
+
+    @Override
+    @Transactional
+    public boolean updateEquipmentStatus(Long equipmentId) {
+        Equipment equipment = getById(equipmentId);
+        if (equipment == null) {
+            return false;
+        }
+        
+        Integer borrowed = baseMapper.selectSumBorrowed(equipmentId);
+        Integer returned = baseMapper.selectSumReturned(equipmentId);
+        Integer faulty = baseMapper.selectSumFaulty(equipmentId);
+        
+        log.info("【设备状态】equipmentId=" + equipmentId + ", stock=" + equipment.getStockQuantity() + 
+            ", borrowed=" + borrowed + ", returned=" + returned + ", faulty=" + faulty);
+        
+        Integer availableQuantity = equipment.getStockQuantity() - borrowed - faulty;
+        
+        Boolean hasPendingRepair = baseMapper.selectHasPendingRepair(equipmentId);
+        Boolean hasActiveReservation = baseMapper.hasActiveReservation(equipmentId);
+        
+        log.info("【设备状态】available=" + availableQuantity + ", hasPendingRepair=" + 
+            hasPendingRepair + ", hasActiveReservation=" + hasActiveReservation);
+        
+        Integer status = calculateStatus(
+            availableQuantity,
+            borrowed,
+            faulty,
+            hasPendingRepair,
+            hasActiveReservation
+        );
+        
+        equipment.setAvailableQuantity(availableQuantity);
+        equipment.setBorrowQuantity(borrowed);
+        equipment.setRepairQuantity(faulty);
+        equipment.setEquipmentStatus(status);
+        
+        return updateById(equipment);
+    }
+
+    private Integer calculateStatus(Integer availableQuantity, Integer borrowQuantity, Integer repairQuantity, Boolean hasPendingRepair, Boolean hasActiveReservation) {
+        if (repairQuantity > 0) {
+            return 4;
+        }
+        if (borrowQuantity > 0 && availableQuantity == 0) {
+            return 3;
+        }
+        if (hasActiveReservation) {
+            return 2;
+        }
+        if (availableQuantity > 0) {
+            return 1;
+        }
+        return 1;
+    }
+
+    @Override
+    @Transactional
+    public boolean borrowEquipment(EquipmentBorrow borrow) {
+        boolean success = borrowMapper.insert(borrow) > 0;
+        if (!success) {
+            return false;
+        }
+        return updateEquipmentStatus(borrow.getEquipmentId());
+    }
+
+    @Override
+    @Transactional
+    public boolean returnEquipment(Long borrowId) {
+        EquipmentBorrow borrow = borrowMapper.selectById(borrowId);
+        if (borrow == null) {
+            return false;
+        }
+        
+        borrow.setBorrowStatus(2);
+        boolean success = borrowMapper.updateById(borrow) > 0;
+        if (!success) {
+            return false;
+        }
+        
+        return updateEquipmentStatus(borrow.getEquipmentId());
+    }
+
+    @Override
+    @Transactional
+    public boolean approveRepair(Long repairId, String comment, Integer status) {
+        EquipmentRepair repair = repairMapper.selectById(repairId);
+        if (repair == null) {
+            return false;
+        }
+        
+        repair.setRepairStatus(status);
+        repair.setAuditResult(comment);
+        boolean success = repairMapper.updateById(repair) > 0;
+        if (!success) {
+            return false;
+        }
+        
+        if (status == 1) {
+            return updateEquipmentStatus(repair.getEquipmentId());
+        }
+        
+        return true;
     }
 }

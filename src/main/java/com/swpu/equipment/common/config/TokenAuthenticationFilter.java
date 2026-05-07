@@ -1,5 +1,7 @@
 package com.swpu.equipment.common.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.common.util.TokenUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+
 /**
  * 自定义Token认证过滤器
  * 用于从请求头中提取Token并进行认证
@@ -41,14 +44,22 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
             String role = tokenUtil.getRoleFromToken(token);
             log.debug("从 Token 中获取的角色: {}", role);
             
-            if (role != null) {
-                // 创建认证对象，包含角色权限
-                Authentication authentication = tokenUtil.createAuthentication(token);
-                log.debug("创建的 Authentication: {}", authentication);
-                if (authentication != null) {
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                    log.debug("认证信息已设置到 SecurityContextHolder");
-                }
+            if (role == null) {
+                log.warn("Token 验证失败，返回 401: {}", token);
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json;charset=UTF-8");
+                Result<Void> result = Result.error(401, "登录已过期，请重新登录");
+                ObjectMapper mapper = new ObjectMapper();
+                response.getWriter().write(mapper.writeValueAsString(result));
+                return;
+            }
+            
+            // 创建认证对象，包含角色权限
+            Authentication authentication = tokenUtil.createAuthentication(token);
+            log.debug("创建的 Authentication: {}", authentication);
+            if (authentication != null) {
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+                log.debug("认证信息已设置到 SecurityContextHolder");
             }
         } else {
             log.debug("请求路径: {} 没有找到 Authorization 请求头或不是 Bearer Token", requestURI);

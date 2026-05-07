@@ -33,14 +33,5 @@
         </where>
         ORDER BY w.create_time DESC
     </select>
-    <!--
-    获取管理员列表 -->
-    <select id="getManagerOptions" resultType="map">
-        SELECT u.id, u.real_name AS label
-        FROM sys_user u
-        WHERE u.real_name IS NOT NULL AND u.real_name != ''
-          AND u.role = 'admin'
-        ORDER BY u.real_name
-    </select>
 
 </mapper>

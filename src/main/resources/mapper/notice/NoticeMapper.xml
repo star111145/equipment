@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.swpu.equipment.notice.mapper.NoticeMapper">
+
+    <resultMap id="NoticeVOResultMap" type="com.swpu.equipment.notice.entity.NoticeVO">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="content" column="content"/>
+        <result property="creatorId" column="creator_id"/>
+        <result property="creatorName" column="creator_name"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <select id="getNoticeList" resultMap="NoticeVOResultMap">
+        SELECT 
+            n.id,
+            n.title,
+            n.content,
+            n.creator_id,
+            u.real_name AS creator_name,
+            n.create_time,
+            n.update_time
+        FROM sys_notice n
+        LEFT JOIN sys_user u ON n.creator_id = u.id
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (n.title LIKE CONCAT('%', #{keyword}, '%')
+                     OR n.content LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY n.create_time DESC
+    </select>
+
+</mapper>

@@ -56,7 +56,19 @@ public class EquipmentReturn {
     private Long equipmentTypeId;
 
     /**
-     * 归还状态：0待审核 1已归还 2已拒绝
+     * 设备类型名称（非数据库字段）
+     */
+    @TableField(exist = false)
+    private String equipmentType;
+
+    /**
+     * 联系电话（非数据库字段）
+     */
+    @TableField(exist = false)
+    private String phone;
+
+    /**
+     * 归还状态: 0-待归还, 1-已归还, 2-已拒绝
      */
     @TableField("return_status")
     private Integer returnStatus;
@@ -74,10 +86,46 @@ public class EquipmentReturn {
     private String realName;
 
     /**
+     * 借用用途
+     */
+    @TableField("purpose")
+    private String purpose;
+
+    /**
      * 归还数量
      */
     @TableField("return_quantity")
     private Integer returnQuantity;
+
+    /**
+     * 借用数量（非数据库字段）
+     */
+    @TableField(exist = false)
+    private Integer borrowQuantity;
+
+    /**
+     * 原始借用数量（非数据库字段，用于显示）
+     */
+    @TableField(exist = false)
+    private Integer originalBorrowQuantity;
+
+    /**
+     * 预计归还时间
+     */
+    @TableField("expected_return_time")
+    private LocalDateTime expectedReturnTime;
+
+    /**
+     * 实际归还时间
+     */
+    @TableField("actual_return_time")
+    private LocalDateTime actualReturnTime;
+
+    /**
+     * 报修数量
+     */
+    @TableField("repair_quantity")
+    private Integer repairQuantity;
 
     /**
      * 归还时间
@@ -96,6 +144,15 @@ public class EquipmentReturn {
      */
     @TableField("audit_result")
     private String auditResult;
+
+    @TableField("audit_user_id")
+    private Long auditUserId;
+
+    @TableField("audit_user_name")
+    private String auditUserName;
+
+    @TableField("audit_time")
+    private LocalDateTime auditTime;
 
     /**
      * 创建时间

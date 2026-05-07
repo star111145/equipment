@@ -10,8 +10,7 @@ import com.swpu.equipment.warehouse.service.WarehouseService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Map;
+
 
 @Service
 public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse> implements WarehouseService {
@@ -24,8 +23,4 @@ public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, Warehouse
         return warehouseMapper.getWarehouseList(page, keyword);
     }
 
-    @Override
-    public List<Map<String, Object>> getManagerOptions() {
-        return warehouseMapper.getManagerOptions();
-    }
 }

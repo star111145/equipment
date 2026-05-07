@@ -2,6 +2,10 @@ package com.swpu.equipment.user.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.swpu.equipment.user.entity.User;
+
+import java.util.List;
+import java.util.Map;
+
 import org.apache.ibatis.annotations.Mapper;
 
 /**
@@ -15,4 +19,6 @@ public interface UserMapper extends BaseMapper<User> {
      * @return 用户信息
      */
     User selectByIdentifier(String identifier);
+
+    List<Map<String, Object>> getManagerOptions();
 }

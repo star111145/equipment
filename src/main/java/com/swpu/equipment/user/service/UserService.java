@@ -1,5 +1,8 @@
 package com.swpu.equipment.user.service;
 
+import java.util.List;
+import java.util.Map;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.swpu.equipment.user.entity.User;
@@ -44,4 +47,10 @@ public interface UserService extends IService<User> {
      * @return 分页结果
      */
     IPage<User> getUserPage(IPage<User> page, String keyword);
+
+    /**
+     * 获取管理员列表
+     * @return 管理员列表
+     */
+    List<Map<String, Object>> getManagerOptions();
 }

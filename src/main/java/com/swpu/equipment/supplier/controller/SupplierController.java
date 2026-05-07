@@ -2,7 +2,7 @@ package com.swpu.equipment.supplier.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.swpu.equipment.common.result.Result;
+import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.supplier.entity.Supplier;
 import com.swpu.equipment.supplier.service.SupplierService;
 import org.springframework.beans.factory.annotation.Autowired;

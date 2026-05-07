@@ -50,7 +50,19 @@ public class EquipmentBorrow {
     private Long equipmentTypeId;
 
     /**
-     * 借用状态：0待审核 1已借出 2已归还 3已取消 4报修中
+     * 设备类型名称（非数据库字段）
+     */
+    @TableField(exist = false)
+    private String equipmentType;
+
+    @TableField(exist = false)
+    private Integer hasReturn;
+    
+    @TableField(exist = false)
+    private Integer hasRepairReturn;
+
+    /**
+     * 借用状态: 0-待审核, 1-已借出, 2-已完成, 3-已取消
      */
     @TableField("borrow_status")
     private Integer borrowStatus;
@@ -72,11 +84,32 @@ public class EquipmentBorrow {
      */
     @TableField("borrow_quantity")
     private Integer borrowQuantity;
+    
+    @TableField(exist = false)
+    private Integer returnQuantity;
+
+    /**
+     * 原始借用数量（非数据库字段，用于显示）
+     */
+    @TableField(exist = false)
+    private Integer originalQuantity;
 
     /**
      * 用途
      */
     private String purpose;
+
+    /**
+     * 预约ID（关联预约表）
+     */
+    @TableField("reserve_id")
+    private Long reserveId;
+
+    /**
+     * 预计归还时间
+     */
+    @TableField("expected_return_time")
+    private LocalDateTime expectedReturnTime;
 
     /**
      * 借用人电话
@@ -100,6 +133,15 @@ public class EquipmentBorrow {
      */
     @TableField("audit_result")
     private String auditResult;
+
+    @TableField("audit_user_id")
+    private Long auditUserId;
+
+    @TableField("audit_user_name")
+    private String auditUserName;
+
+    @TableField("audit_time")
+    private LocalDateTime auditTime;
 
     /**
      * 创建时间

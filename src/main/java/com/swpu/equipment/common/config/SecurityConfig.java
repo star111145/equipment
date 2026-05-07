@@ -65,6 +65,10 @@ public class SecurityConfig {
                         .requestMatchers("/login", "/logout", "/register").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/error").permitAll()
                         .requestMatchers("/api/uploads/**", "/uploads/**").permitAll()
+                        // 放行WebSocket接口
+                        .requestMatchers("/ws/**", "/api/ws/**").permitAll()
+                        // 放行所有API接口（开发阶段）
+                        .requestMatchers("/api/**").permitAll()
                         // 其他请求需要认证
                         .anyRequest().authenticated()
                 )

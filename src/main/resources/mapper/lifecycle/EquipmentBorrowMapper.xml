@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.swpu.equipment.lifecycle.mapper.EquipmentBorrowMapper">
+
+    <resultMap id="BaseResultMap" type="com.swpu.equipment.lifecycle.entity.EquipmentBorrow">
+        <id property="id" column="id"/>
+        <result property="equipmentId" column="equipment_id"/>
+        <result property="equipmentNumber" column="equipment_number"/>
+        <result property="equipmentName" column="equipment_name"/>
+        <result property="equipmentModel" column="equipment_model"/>
+        <result property="equipmentImage" column="equipment_image"/>
+        <result property="equipmentTypeId" column="equipment_type_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="realName" column="real_name"/>
+        <result property="phone" column="phone"/>
+        <result property="borrowQuantity" column="borrow_quantity"/>
+        <result property="returnQuantity" column="return_quantity"/>
+        <result property="borrowTime" column="borrow_time"/>
+        <result property="expectedReturnTime" column="expected_return_time"/>
+        <result property="purpose" column="purpose"/>
+        <result property="borrowStatus" column="borrow_status"/>
+        <result property="auditStatus" column="audit_status"/>
+        <result property="auditUserId" column="audit_user_id"/>
+        <result property="auditUserName" column="audit_user_name"/>
+        <result property="auditTime" column="audit_time"/>
+        <result property="auditResult" column="audit_result"/>
+        <result property="reserveId" column="reserve_id"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="hasReturn" column="has_return"/>
+        <result property="hasRepairReturn" column="has_repair_return"/>
+    </resultMap>
+
+    <resultMap id="BorrowVOResultMap" type="com.swpu.equipment.lifecycle.entity.EquipmentBorrow">
+        <id property="id" column="id"/>
+        <result property="equipmentId" column="equipment_id"/>
+        <result property="equipmentNumber" column="equipment_number"/>
+        <result property="equipmentName" column="equipment_name"/>
+        <result property="equipmentModel" column="equipment_model"/>
+        <result property="equipmentImage" column="equipment_image"/>
+        <result property="equipmentTypeId" column="equipment_type_id"/>
+        <result property="equipmentType" column="equipment_type"/>
+        <result property="userId" column="user_id"/>
+        <result property="realName" column="real_name"/>
+        <result property="phone" column="phone"/>
+        <result property="borrowQuantity" column="borrow_quantity"/>
+        <result property="returnQuantity" column="return_quantity"/>
+        <result property="borrowTime" column="borrow_time"/>
+        <result property="expectedReturnTime" column="expected_return_time"/>
+        <result property="purpose" column="purpose"/>
+        <result property="borrowStatus" column="borrow_status"/>
+        <result property="auditStatus" column="audit_status"/>
+        <result property="auditUserId" column="audit_user_id"/>
+        <result property="auditUserName" column="audit_user_name"/>
+        <result property="auditTime" column="audit_time"/>
+        <result property="auditResult" column="audit_result"/>
+        <result property="reserveId" column="reserve_id"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="hasReturn" column="has_return"/>
+    </resultMap>
+
+    <select id="getBorrowQuantity" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(borrow_quantity), 0)
+        FROM equipment_borrow 
+        WHERE equipment_id = #{equipmentId} 
+        AND borrow_status = 1
+        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1)
+    </select>
+
+    <select id="countUnreturnedBorrows" resultType="java.lang.Long">
+        SELECT COUNT(*) 
+        FROM equipment_borrow 
+        WHERE user_id = #{userId} 
+        AND equipment_id = #{equipmentId}
+        AND borrow_status = 1
+        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1 AND er.audit_result != '报修通过自动归还')
+    </select>
+    
+    <select id="countPendingBorrows" resultType="java.lang.Integer">
+        SELECT COUNT(*) 
+        FROM equipment_borrow 
+        WHERE user_id = #{userId} 
+        AND equipment_id = #{equipmentId}
+        AND audit_status = 0
+    </select>
+
+    <select id="getRepairQuantity" resultType="java.lang.Long">
+        SELECT COUNT(*) 
+        FROM equipment_repair 
+        WHERE equipment_id = #{equipmentId} 
+        AND repair_status = 1
+    </select>
+
+    <select id="getRepairQuantityByUser" resultType="java.lang.Long">
+        SELECT COUNT(*) 
+        FROM equipment_repair 
+        WHERE equipment_id = #{equipmentId} 
+        AND user_id = #{userId}
+        AND repair_status = 1
+    </select>
+
+    <select id="getUserUnreturnedBorrowQuantity" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(borrow_quantity), 0)
+        FROM equipment_borrow
+        WHERE equipment_id = #{equipmentId}
+        AND user_id = #{userId}
+        AND borrow_status = 1
+        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1)
+    </select>
+
+    <select id="countUserBorrowedEquipment" resultType="java.lang.Long">
+        SELECT COUNT(*) 
+        FROM equipment_borrow 
+        WHERE equipment_id = #{equipmentId} 
+        AND user_id = #{userId}
+        AND borrow_status = 1
+        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1 AND er.audit_result != '报修通过自动归还')
+    </select>
+
+    <select id="findUnreturnedBorrowsByEquipmentAndUser" resultMap="BaseResultMap">
+        SELECT * 
+        FROM equipment_borrow 
+        WHERE equipment_id = #{equipmentId} 
+        AND user_id = #{userId}
+        AND borrow_status = 1
+        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1)
+    </select>
+
+    <select id="findUnreturnedBorrowsByEquipment" resultMap="BaseResultMap">
+        SELECT * 
+        FROM equipment_borrow 
+        WHERE equipment_id = #{equipmentId}
+        AND borrow_status = 1
+        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1)
+    </select>
+
+    <select id="getPageListWithType" resultMap="BorrowVOResultMap">
+        SELECT 
+            b.id,
+            b.equipment_id,
+            b.equipment_number,
+            b.equipment_name,
+            COALESCE(b.equipment_model, e.equipment_model) AS equipment_model,
+            COALESCE(b.equipment_image, e.equipment_image) AS equipment_image,
+            b.equipment_type_id,
+            et.type_name AS equipment_type,
+            b.user_id,
+            u.real_name AS real_name,
+            u.phone AS phone,
+            b.borrow_quantity + COALESCE((SELECT SUM(er.return_quantity) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1), 0) AS original_quantity,
+            b.borrow_quantity,
+            COALESCE((SELECT SUM(er.return_quantity) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1), 0) AS return_quantity,
+            b.borrow_time,
+            b.expected_return_time,
+            b.purpose,
+            b.borrow_status,
+            b.audit_status,
+            b.audit_user_id,
+            bu.real_name AS audit_user_name,
+            b.audit_time,
+            b.audit_result,
+            b.reserve_id,
+            b.create_time,
+            b.update_time,
+            (SELECT COUNT(*) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1) AS has_return,
+            (SELECT COUNT(*) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1 AND er.audit_result = '报修通过自动归还') AS has_repair_return
+        FROM equipment_borrow b
+        LEFT JOIN equipment e ON b.equipment_id = e.id
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN sys_user u ON b.user_id = u.id
+        LEFT JOIN sys_user bu ON b.audit_user_id = bu.id
+        <where>
+            <if test="userId != null">
+                AND b.user_id = #{userId}
+            </if>
+            <if test="status != null and status != -1">
+                <if test="status == 1">
+                    AND b.borrow_status = 1 
+                    AND (SELECT COUNT(*) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1) = 0
+                    AND (b.expected_return_time IS NULL OR b.expected_return_time > NOW())
+                </if>
+                <if test="status == 5">
+                    AND b.borrow_status = 1 
+                    AND (SELECT COUNT(*) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1) = 0
+                    AND b.expected_return_time IS NOT NULL 
+                    AND b.expected_return_time &lt; NOW()
+                </if>
+                <if test="status == 6">
+                    AND (SELECT COUNT(*) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1) > 0
+                </if>
+                <if test="status != 1 and status != 5 and status != 6">
+                    AND b.borrow_status = #{status}
+                </if>
+            </if>
+            <if test="auditStatus != null and auditStatus != -1">
+                AND b.audit_status = #{auditStatus}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (b.equipment_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR b.equipment_number LIKE CONCAT('%', #{keyword}, '%')
+                     OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY b.create_time DESC
+    </select>
+
+    <select id="countOverdueBorrows" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM equipment_borrow
+        WHERE user_id = #{userId}
+        AND borrow_status = 1
+        AND expected_return_time &lt; NOW()
+        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1)
+    </select>
+
+</mapper>

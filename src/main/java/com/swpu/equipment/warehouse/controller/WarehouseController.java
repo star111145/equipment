@@ -3,7 +3,7 @@ package com.swpu.equipment.warehouse.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.swpu.equipment.common.result.Result;
+import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.equipment.entity.Equipment;
 import com.swpu.equipment.equipment.service.EquipmentService;
 import com.swpu.equipment.warehouse.entity.Warehouse;
@@ -18,7 +18,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
+
 
 @RestController
 @RequestMapping("/warehouse")
@@ -56,16 +56,6 @@ public class WarehouseController {
         return Result.success(list);
     }
 
-
-    /**
-     * 获取管理员列表
-     */
-    @GetMapping("/managers")
-    @PreAuthorize("hasAuthority('admin')")
-    public Result<List<Map<String, Object>>> getManagers() {
-        List<Map<String, Object>> list = warehouseService.getManagerOptions();
-        return Result.success(list);
-    }
 
     /**
      * 获取仓库详情

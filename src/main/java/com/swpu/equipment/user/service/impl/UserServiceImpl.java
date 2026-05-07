@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 用户业务层实现（优化后）
@@ -133,4 +135,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         return this.page(page, wrapper);
     }
+
+
+    @Override
+    public List<Map<String, Object>> getManagerOptions() {
+        return userMapper.getManagerOptions();
+    }
+
 }

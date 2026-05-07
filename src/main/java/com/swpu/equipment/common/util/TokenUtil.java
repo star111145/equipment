@@ -28,6 +28,10 @@ public class TokenUtil {
     @Autowired
     private com.swpu.equipment.user.service.UserService userService;
 
+    public long getExpire() {
+        return expire;
+    }
+
     // 生成Token
     public String generateToken(Long userId) {
         try {

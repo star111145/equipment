@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.swpu.equipment.lifecycle.mapper.EquipmentRepairMapper">
+
+    <resultMap id="RepairVOResultMap" type="com.swpu.equipment.lifecycle.entity.EquipmentRepair">
+        <id column="id" property="id"/>
+        <result column="equipment_id" property="equipmentId"/>
+        <result column="equipment_number" property="equipmentNumber"/>
+        <result column="equipment_name" property="equipmentName"/>
+        <result column="equipment_model" property="equipmentModel"/>
+        <result column="equipment_image" property="equipmentImage"/>
+        <result column="equipment_type_id" property="equipmentTypeId"/>
+        <result column="equipment_type_name" property="equipmentTypeName"/>
+        <result column="repair_status" property="repairStatus"/>
+        <result column="user_id" property="userId"/>
+        <result column="real_name" property="realName"/>
+        <result column="repair_quantity" property="repairQuantity"/>
+        <result column="fault_description" property="faultDescription"/>
+        <result column="fault_image" property="faultImage"/>
+        <result column="phone" property="phone"/>
+        <result column="repair_time" property="repairTime"/>
+        <result column="audit_status" property="auditStatus"/>
+        <result column="audit_result" property="auditResult"/>
+        <result column="expected_return_time" property="expectedReturnTime"/>
+        <result column="audit_user_id" property="auditUserId"/>
+        <result column="audit_user_name" property="auditUserName"/>
+        <result column="audit_time" property="auditTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="getRepairQuantity" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(repair_quantity), 0)
+        FROM equipment_repair
+        WHERE equipment_id = #{equipmentId}
+        AND repair_status = 1
+    </select>
+
+    <select id="getMaintenanceQuantity" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(repair_quantity), 0)
+        FROM equipment_repair
+        WHERE equipment_id = #{equipmentId}
+        AND repair_status = 2
+    </select>
+
+    <select id="selectSumFaulty" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(repair_quantity), 0)
+        FROM equipment_repair
+        WHERE equipment_id = #{equipmentId}
+        AND repair_status = 1
+        AND audit_status = 1
+    </select>
+
+    <select id="selectHasPendingRepair" resultType="java.lang.Boolean">
+        SELECT COUNT(*) > 0
+        FROM equipment_repair
+        WHERE equipment_id = #{equipmentId}
+        AND audit_status = 0
+    </select>
+    
+    <select id="countPendingRepairs" resultType="java.lang.Integer">
+        SELECT COUNT(*) 
+        FROM equipment_repair
+        WHERE user_id = #{userId}
+        AND equipment_id = #{equipmentId}
+        AND audit_status = 0
+    </select>
+
+    <select id="getPageListWithType" resultMap="RepairVOResultMap">
+        SELECT
+            r.id,
+            r.equipment_id,
+            r.equipment_number,
+            r.equipment_name,
+            COALESCE(r.equipment_model, e.equipment_model) AS equipment_model,
+            COALESCE(r.equipment_image, e.equipment_image) AS equipment_image,
+            r.equipment_type_id,
+            et.type_name AS equipment_type_name,
+            r.repair_status,
+            r.user_id,
+            r.real_name,
+            r.repair_quantity,
+            r.fault_description,
+            r.fault_image,
+            r.phone,
+            r.repair_time,
+            r.audit_status,
+            r.audit_result,
+            r.expected_return_time,
+            r.audit_user_id,
+            r.audit_user_name,
+            r.audit_time,
+            r.create_time,
+            r.update_time
+        FROM equipment_repair r
+        LEFT JOIN equipment e ON r.equipment_id = e.id
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        <where>
+            <if test="userId != null">
+                r.user_id = #{userId}
+            </if>
+            <if test="repairStatus != null and repairStatus != -1">
+                AND r.repair_status = #{repairStatus}
+            </if>
+            <if test="auditStatus != null and auditStatus != -1">
+                AND r.audit_status = #{auditStatus}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    r.equipment_number LIKE CONCAT('%', #{keyword}, '%')
+                    OR r.equipment_name LIKE CONCAT('%', #{keyword}, '%')
+                    OR r.real_name LIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+        ORDER BY r.create_time DESC
+    </select>
+
+</mapper>
