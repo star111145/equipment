@@ -16,7 +16,7 @@
         <result column="real_name" property="realName"/>
         <result column="repair_quantity" property="repairQuantity"/>
         <result column="fault_description" property="faultDescription"/>
-        <result column="fault_image" property="faultImage"/>
+        <result column="fault_image" property="faultImageJson"/>
         <result column="phone" property="phone"/>
         <result column="repair_time" property="repairTime"/>
         <result column="audit_status" property="auditStatus"/>

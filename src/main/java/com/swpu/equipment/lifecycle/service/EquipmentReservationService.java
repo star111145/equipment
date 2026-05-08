@@ -11,7 +11,7 @@ import java.util.List;
 
 public interface EquipmentReservationService extends IService<EquipmentReservation> {
     
-    IPage<EquipmentReservationVO> getPageList(Page<EquipmentReservationVO> page, String keyword, Integer status);
+    IPage<EquipmentReservationVO> getPageList(Page<EquipmentReservationVO> page, String keyword, Integer status, Integer auditStatus);
     
     IPage<EquipmentReservationVO> getPageListByUserId(Page<EquipmentReservationVO> page, Long userId, String keyword, Integer status);
     

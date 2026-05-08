@@ -16,7 +16,8 @@ public interface EquipmentReservationMapper extends BaseMapper<EquipmentReservat
     
     IPage<EquipmentReservationVO> getPageList(Page<EquipmentReservationVO> page, 
                                               @Param("keyword") String keyword, 
-                                              @Param("status") Integer status);
+                                              @Param("status") Integer status,
+                                              @Param("auditStatus") Integer auditStatus);
     
     IPage<EquipmentReservationVO> getPageListByUserId(Page<EquipmentReservationVO> page, 
                                                       @Param("userId") Long userId,

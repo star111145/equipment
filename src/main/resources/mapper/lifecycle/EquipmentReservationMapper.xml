@@ -108,6 +108,9 @@
                     AND r.reserve_status = #{status}
                 </if>
             </if>
+            <if test="auditStatus != null and auditStatus != -1">
+                AND r.audit_status = #{auditStatus}
+            </if>
         </where>
         ORDER BY r.create_time DESC
     </select>

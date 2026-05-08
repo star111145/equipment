@@ -19,21 +19,33 @@ public class DashboardController {
     private DashboardService dashboardService;
     
     @GetMapping("/statistics")
-    public Result<DashboardStatistics> getDashboardStatistics() {
-        DashboardStatistics statistics = dashboardService.getDashboardStatistics();
+    public Result<DashboardStatistics> getDashboardStatistics(
+            @RequestParam(required = false) String equipmentType,
+            @RequestParam(required = false) Long equipmentId,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String role) {
+        DashboardStatistics statistics = dashboardService.getDashboardStatistics(equipmentType, equipmentId, userId, role);
         return Result.success(statistics);
     }
     
     @GetMapping("/equipment-status")
-    public Result<List<EquipmentStatusCount>> getEquipmentStatusCount() {
-        List<EquipmentStatusCount> counts = dashboardService.getEquipmentStatusCount();
+    public Result<List<EquipmentStatusCount>> getEquipmentStatusCount(
+            @RequestParam(required = false) String equipmentType,
+            @RequestParam(required = false) Long equipmentId,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String role) {
+        List<EquipmentStatusCount> counts = dashboardService.getEquipmentStatusCount(equipmentType, equipmentId, userId, role);
         return Result.success(counts);
     }
     
     @GetMapping("/usage-trend")
     public Result<List<EquipmentUsageTrend>> getEquipmentUsageTrend(
-            @RequestParam(defaultValue = "week") String period) {
-        List<EquipmentUsageTrend> trends = dashboardService.getEquipmentUsageTrend(period);
+            @RequestParam(defaultValue = "week") String period,
+            @RequestParam(required = false) String equipmentType,
+            @RequestParam(required = false) Long equipmentId,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String role) {
+        List<EquipmentUsageTrend> trends = dashboardService.getEquipmentUsageTrend(period, equipmentType, equipmentId, userId, role);
         return Result.success(trends);
     }
     
@@ -54,14 +66,22 @@ public class DashboardController {
     
     @GetMapping("/reservation-hotspots")
     public Result<List<ReservationHotspot>> getReservationHotspots(
-            @RequestParam(defaultValue = "10") int limit) {
-        List<ReservationHotspot> hotspots = dashboardService.getReservationHotspots(limit);
+            @RequestParam(defaultValue = "10") Integer limit,
+            @RequestParam(required = false) String equipmentType,
+            @RequestParam(required = false) Long equipmentId,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String role) {
+        List<ReservationHotspot> hotspots = dashboardService.getReservationHotspots(limit, equipmentType, equipmentId, userId, role);
         return Result.success(hotspots);
     }
     
     @GetMapping("/repair-statistics")
-    public Result<RepairStatistics> getRepairStatistics() {
-        RepairStatistics statistics = dashboardService.getRepairStatistics();
+    public Result<RepairStatistics> getRepairStatistics(
+            @RequestParam(required = false) String equipmentType,
+            @RequestParam(required = false) Long equipmentId,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String role) {
+        RepairStatistics statistics = dashboardService.getRepairStatistics(equipmentType, equipmentId, userId, role);
         return Result.success(statistics);
     }
 }

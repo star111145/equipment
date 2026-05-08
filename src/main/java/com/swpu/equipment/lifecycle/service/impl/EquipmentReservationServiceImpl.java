@@ -28,8 +28,8 @@ public class EquipmentReservationServiceImpl extends ServiceImpl<EquipmentReserv
     private EquipmentBorrowMapper borrowMapper;
     
     @Override
-    public IPage<EquipmentReservationVO> getPageList(Page<EquipmentReservationVO> page, String keyword, Integer status) {
-        return baseMapper.getPageList(page, keyword, status);
+    public IPage<EquipmentReservationVO> getPageList(Page<EquipmentReservationVO> page, String keyword, Integer status, Integer auditStatus) {
+        return baseMapper.getPageList(page, keyword, status, auditStatus);
     }
     
     @Override

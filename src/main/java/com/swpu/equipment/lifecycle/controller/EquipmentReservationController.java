@@ -60,6 +60,7 @@ public class EquipmentReservationController {
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(defaultValue = "") String keyword,
             @RequestParam(defaultValue = "-1") Integer status,
+            @RequestParam(defaultValue = "-1") Integer auditStatus,
             HttpServletRequest request) {
         String token = request.getHeader("Authorization");
         Long userId = tokenUtil.getUserIdFromToken(token);
@@ -73,7 +74,7 @@ public class EquipmentReservationController {
         }
         
         Page<EquipmentReservationVO> page = new Page<>(current, size);
-        IPage<EquipmentReservationVO> result = reservationService.getPageList(page, keyword, status);
+        IPage<EquipmentReservationVO> result = reservationService.getPageList(page, keyword, status, auditStatus);
         
         return Result.success(result);
     }

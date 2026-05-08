@@ -6,17 +6,17 @@ import java.util.List;
 
 public interface DashboardService {
     
-    DashboardStatistics getDashboardStatistics();
+    DashboardStatistics getDashboardStatistics(String equipmentType, Long equipmentId, Long userId, String role);
     
-    List<EquipmentStatusCount> getEquipmentStatusCount();
+    List<EquipmentStatusCount> getEquipmentStatusCount(String equipmentType, Long equipmentId, Long userId, String role);
     
-    List<EquipmentUsageTrend> getEquipmentUsageTrend(String period);
+    List<EquipmentUsageTrend> getEquipmentUsageTrend(String period, String equipmentType, Long equipmentId, Long userId, String role);
     
     List<DashboardPendingAction> getDashboardPendingActions(Long userId, String role, String type);
     
     List<DashboardLatestRecord> getDashboardLatestRecords();
     
-    List<ReservationHotspot> getReservationHotspots(int limit);
+    List<ReservationHotspot> getReservationHotspots(Integer limit, String equipmentType, Long equipmentId, Long userId, String role);
     
-    RepairStatistics getRepairStatistics();
+    RepairStatistics getRepairStatistics(String equipmentType, Long equipmentId, Long userId, String role);
 }

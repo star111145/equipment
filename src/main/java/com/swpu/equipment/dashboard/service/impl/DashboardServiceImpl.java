@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.swpu.equipment.dashboard.entity.*;
 import com.swpu.equipment.dashboard.service.DashboardService;
 import com.swpu.equipment.equipment.entity.Equipment;
+import com.swpu.equipment.equipment.entity.EquipmentType;
 import com.swpu.equipment.equipment.mapper.EquipmentMapper;
+import com.swpu.equipment.equipment.mapper.EquipmentTypeMapper;
 import com.swpu.equipment.lifecycle.entity.EquipmentBorrow;
 import com.swpu.equipment.lifecycle.entity.EquipmentReservation;
 import com.swpu.equipment.lifecycle.entity.EquipmentRepair;
@@ -17,6 +19,8 @@ import com.swpu.equipment.user.entity.User;
 import com.swpu.equipment.user.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -33,6 +37,9 @@ public class DashboardServiceImpl implements DashboardService {
     private EquipmentMapper equipmentMapper;
     
     @Autowired
+    private EquipmentTypeMapper equipmentTypeMapper;
+    
+    @Autowired
     private EquipmentReservationMapper reservationMapper;
     
     @Autowired
@@ -47,26 +54,227 @@ public class DashboardServiceImpl implements DashboardService {
     @Autowired
     private UserMapper userMapper;
     
-    @Override
-    public DashboardStatistics getDashboardStatistics() {
-        DashboardStatistics stats = new DashboardStatistics();
+    private Set<Long> getFilteredEquipmentIds(String equipmentType, Long equipmentId) {
+        Set<Long> filteredIds = new HashSet<>();
         
-        List<Equipment> equipmentList = equipmentMapper.selectList(new LambdaQueryWrapper<>());
-        stats.setTotalEquipment((long) equipmentList.size());
-        
-        Map<Integer, Long> statusCount = new HashMap<>();
-        for (Equipment equipment : equipmentList) {
-            Integer status = equipment.getEquipmentStatus();
-            statusCount.put(status, statusCount.getOrDefault(status, 0L) + 1);
+        Map<String, Long> nameToTypeIdMap = new HashMap<>();
+        List<EquipmentType> allTypes = equipmentTypeMapper.selectList(new LambdaQueryWrapper<>());
+        for (EquipmentType t : allTypes) {
+            nameToTypeIdMap.put(t.getTypeName(), t.getId());
         }
         
-        stats.setAvailableEquipment(statusCount.getOrDefault(1, 0L));
-        stats.setReservedEquipment(statusCount.getOrDefault(2, 0L));
-        stats.setBorrowedEquipment(statusCount.getOrDefault(3, 0L));
-        stats.setRepairingEquipment(statusCount.getOrDefault(0, 0L));
-        stats.setBrokenEquipment(statusCount.getOrDefault(4, 0L));
+        LambdaQueryWrapper<Equipment> query = new LambdaQueryWrapper<>();
         
-        List<EquipmentReservation> reservationList = reservationMapper.selectList(new LambdaQueryWrapper<>());
+        if (equipmentId != null) {
+            query.eq(Equipment::getId, equipmentId);
+        } else if (equipmentType != null && !equipmentType.isEmpty()) {
+            Long typeId = nameToTypeIdMap.get(equipmentType);
+            if (typeId != null) {
+                query.eq(Equipment::getEquipmentTypeId, typeId);
+            }
+        }
+        
+        List<Equipment> equipmentList = equipmentMapper.selectList(query);
+        for (Equipment e : equipmentList) {
+            filteredIds.add(e.getId());
+        }
+        
+        return filteredIds;
+    }
+    
+    /**
+     * 获取用户使用过的设备ID集合（预约过、借用过、报修过的设备）
+     */
+    private Set<Long> getUserEquipmentIds(Long userId) {
+        Set<Long> userEquipmentIds = new HashSet<>();
+        
+        // 查询用户预约过的设备
+        LambdaQueryWrapper<EquipmentReservation> resQuery = new LambdaQueryWrapper<>();
+        resQuery.eq(EquipmentReservation::getUserId, userId);
+        List<EquipmentReservation> reservations = reservationMapper.selectList(resQuery);
+        for (EquipmentReservation r : reservations) {
+            if (r.getEquipmentId() != null) {
+                userEquipmentIds.add(r.getEquipmentId());
+            }
+        }
+        
+        // 查询用户借用过的设备
+        LambdaQueryWrapper<EquipmentBorrow> borrowQuery = new LambdaQueryWrapper<>();
+        borrowQuery.eq(EquipmentBorrow::getUserId, userId);
+        List<EquipmentBorrow> borrows = borrowMapper.selectList(borrowQuery);
+        for (EquipmentBorrow b : borrows) {
+            if (b.getEquipmentId() != null) {
+                userEquipmentIds.add(b.getEquipmentId());
+            }
+        }
+        
+        // 查询用户报修过的设备
+        LambdaQueryWrapper<EquipmentRepair> repairQuery = new LambdaQueryWrapper<>();
+        repairQuery.eq(EquipmentRepair::getUserId, userId);
+        List<EquipmentRepair> repairs = repairMapper.selectList(repairQuery);
+        for (EquipmentRepair r : repairs) {
+            if (r.getEquipmentId() != null) {
+                userEquipmentIds.add(r.getEquipmentId());
+            }
+        }
+        
+        return userEquipmentIds;
+    }
+    
+    /**
+     * 计算设备当前状态（基于实际预约/借用记录，动态计算）
+     * 优化：避免N+1查询问题，先批量查询所有预约和借用记录，然后在内存中处理
+     */
+    private Map<String, Long> calculateCurrentStatusCount(Set<Long> equipmentIds, Long userId, boolean isAdmin) {
+        Map<String, Long> statusCount = new HashMap<>();
+        
+        LambdaQueryWrapper<Equipment> query = new LambdaQueryWrapper<>();
+        if (!equipmentIds.isEmpty()) {
+            query.in(Equipment::getId, equipmentIds);
+        }
+        List<Equipment> allEquipment = equipmentMapper.selectList(query);
+        
+        if (allEquipment.isEmpty()) {
+            return statusCount;
+        }
+        
+        Set<Long> allEquipmentIds = new HashSet<>();
+        for (Equipment e : allEquipment) {
+            allEquipmentIds.add(e.getId());
+        }
+        
+        LocalDateTime now = LocalDateTime.now();
+        
+        // 普通用户：只统计用户借用/预约的设备状态
+        Set<Long> userEquipmentIds = new HashSet<>();
+        if (!isAdmin && userId != null) {
+            userEquipmentIds = getUserEquipmentIds(userId);
+            if (!equipmentIds.isEmpty()) {
+                userEquipmentIds.retainAll(equipmentIds);
+            }
+        }
+        
+        // 批量查询所有有效预约（状态=1已通过），然后在内存中过滤未过期的记录
+        LambdaQueryWrapper<EquipmentReservation> resQuery = new LambdaQueryWrapper<>();
+        resQuery.in(EquipmentReservation::getEquipmentId, allEquipmentIds)
+                .eq(EquipmentReservation::getReserveStatus, 1);
+        List<EquipmentReservation> allReservations = reservationMapper.selectList(resQuery);
+        
+        Set<Long> reservedEquipmentIds = new HashSet<>();
+        for (EquipmentReservation r : allReservations) {
+            if (r.getReserveTime() != null && r.getEquipmentId() != null) {
+                LocalDateTime reserveEnd = r.getReserveTime().plusHours(r.getReserveDuration() != null ? r.getReserveDuration() : 0);
+                if (reserveEnd.isAfter(now)) {
+                    reservedEquipmentIds.add(r.getEquipmentId());
+                }
+            }
+        }
+        
+        LambdaQueryWrapper<EquipmentBorrow> borrowQuery = new LambdaQueryWrapper<>();
+        borrowQuery.in(EquipmentBorrow::getEquipmentId, allEquipmentIds)
+                  .eq(EquipmentBorrow::getBorrowStatus, 1);
+        List<EquipmentBorrow> allBorrows = borrowMapper.selectList(borrowQuery);
+        
+        Set<Long> borrowedEquipmentIds = new HashSet<>();
+        for (EquipmentBorrow b : allBorrows) {
+            if (b.getEquipmentId() != null) {
+                borrowedEquipmentIds.add(b.getEquipmentId());
+            }
+        }
+        
+        // 查询维修中的设备（报修状态=1）
+        LambdaQueryWrapper<EquipmentRepair> repairQuery = new LambdaQueryWrapper<>();
+        repairQuery.in(EquipmentRepair::getEquipmentId, allEquipmentIds)
+                  .eq(EquipmentRepair::getRepairStatus, 1);
+        List<EquipmentRepair> allRepairs = repairMapper.selectList(repairQuery);
+        
+        Set<Long> repairingEquipmentIds = new HashSet<>();
+        for (EquipmentRepair r : allRepairs) {
+            if (r.getEquipmentId() != null) {
+                repairingEquipmentIds.add(r.getEquipmentId());
+            }
+        }
+        
+        // 统计设备状态：只按实际预约/借用/维修记录计算
+        // 设备表的静态状态仅作为管理员提醒，不参与统计计算
+        for (Equipment e : allEquipment) {
+            int stock = e.getStockQuantity() != null ? e.getStockQuantity() : 1;
+            
+            // 按实际预约/借用/维修状态计算
+            if (repairingEquipmentIds.contains(e.getId())) {
+                statusCount.put("repairing", statusCount.getOrDefault("repairing", 0L) + stock);
+            } else if (reservedEquipmentIds.contains(e.getId())) {
+                statusCount.put("reserved", statusCount.getOrDefault("reserved", 0L) + stock);
+            } else if (borrowedEquipmentIds.contains(e.getId())) {
+                statusCount.put("borrowed", statusCount.getOrDefault("borrowed", 0L) + stock);
+            } else {
+                statusCount.put("available", statusCount.getOrDefault("available", 0L) + stock);
+            }
+        }
+        
+        return statusCount;
+    }
+    
+    @Override
+    public DashboardStatistics getDashboardStatistics(String equipmentType, Long equipmentId, Long userId, String role) {
+        DashboardStatistics stats = new DashboardStatistics();
+        
+        boolean isAdmin = "admin".equals(role);
+        
+        Set<Long> filteredEquipmentIds = getFilteredEquipmentIds(equipmentType, equipmentId);
+        
+        Set<Long> userEquipmentIds = new HashSet<>();
+        if (!isAdmin && userId != null) {
+            userEquipmentIds = getUserEquipmentIds(userId);
+            if (equipmentId == null && equipmentType == null) {
+                filteredEquipmentIds = userEquipmentIds;
+            }
+        }
+        
+        LambdaQueryWrapper<Equipment> eq = new LambdaQueryWrapper<>();
+        if (equipmentId != null) {
+            eq.eq(Equipment::getId, equipmentId);
+        } else if (equipmentType != null && !equipmentType.isEmpty()) {
+            Map<String, Long> nameToTypeIdMap = new HashMap<>();
+            List<EquipmentType> allTypes = equipmentTypeMapper.selectList(new LambdaQueryWrapper<>());
+            for (EquipmentType t : allTypes) {
+                nameToTypeIdMap.put(t.getTypeName(), t.getId());
+            }
+            Long typeId = nameToTypeIdMap.get(equipmentType);
+            if (typeId != null) {
+                eq.eq(Equipment::getEquipmentTypeId, typeId);
+            }
+        }
+        if (!isAdmin && userId != null && equipmentId == null && equipmentType == null) {
+            eq.in(Equipment::getId, userEquipmentIds);
+        }
+        List<Equipment> equipmentList = equipmentMapper.selectList(eq);
+        
+        long totalStock = 0;
+        for (Equipment e : equipmentList) {
+            totalStock += e.getStockQuantity() != null ? e.getStockQuantity() : 1;
+        }
+        stats.setTotalEquipment(totalStock);
+        
+        Map<String, Long> currentStatusCount = calculateCurrentStatusCount(filteredEquipmentIds, userId, isAdmin);
+        
+        stats.setAvailableEquipment(currentStatusCount.getOrDefault("available", 0L));
+        stats.setReservedEquipment(currentStatusCount.getOrDefault("reserved", 0L));
+        stats.setBorrowedEquipment(currentStatusCount.getOrDefault("borrowed", 0L));
+        stats.setRepairingEquipment(currentStatusCount.getOrDefault("repairing", 0L));
+        stats.setBrokenEquipment(currentStatusCount.getOrDefault("broken", 0L));
+        
+        LambdaQueryWrapper<EquipmentReservation> rq = new LambdaQueryWrapper<>();
+        if (equipmentId != null) {
+            rq.eq(EquipmentReservation::getEquipmentId, equipmentId);
+        } else if (!filteredEquipmentIds.isEmpty()) {
+            rq.in(EquipmentReservation::getEquipmentId, filteredEquipmentIds);
+        }
+        if (!isAdmin && userId != null) {
+            rq.eq(EquipmentReservation::getUserId, userId);
+        }
+        List<EquipmentReservation> reservationList = reservationMapper.selectList(rq);
+        
         stats.setTotalReservation((long) reservationList.size());
         
         Map<Integer, Long> reservationStatusCount = new HashMap<>();
@@ -79,7 +287,16 @@ public class DashboardServiceImpl implements DashboardService {
         stats.setApprovedReservation(reservationStatusCount.getOrDefault(1, 0L));
         stats.setRejectedReservation(reservationStatusCount.getOrDefault(2, 0L));
         
-        List<EquipmentBorrow> borrowList = borrowMapper.selectList(new LambdaQueryWrapper<>());
+        LambdaQueryWrapper<EquipmentBorrow> bk = new LambdaQueryWrapper<>();
+        if (equipmentId != null) {
+            bk.eq(EquipmentBorrow::getEquipmentId, equipmentId);
+        } else if (!filteredEquipmentIds.isEmpty()) {
+            bk.in(EquipmentBorrow::getEquipmentId, filteredEquipmentIds);
+        }
+        if (!isAdmin && userId != null) {
+            bk.eq(EquipmentBorrow::getUserId, userId);
+        }
+        List<EquipmentBorrow> borrowList = borrowMapper.selectList(bk);
         stats.setTotalBorrow((long) borrowList.size());
         
         Map<Integer, Long> borrowStatusCount = new HashMap<>();
@@ -92,7 +309,16 @@ public class DashboardServiceImpl implements DashboardService {
         stats.setApprovedBorrow(borrowStatusCount.getOrDefault(1, 0L));
         stats.setReturnedBorrow(borrowStatusCount.getOrDefault(2, 0L));
         
-        List<EquipmentRepair> repairList = repairMapper.selectList(new LambdaQueryWrapper<>());
+        LambdaQueryWrapper<EquipmentRepair> rp = new LambdaQueryWrapper<>();
+        if (equipmentId != null) {
+            rp.eq(EquipmentRepair::getEquipmentId, equipmentId);
+        } else if (!filteredEquipmentIds.isEmpty()) {
+            rp.in(EquipmentRepair::getEquipmentId, filteredEquipmentIds);
+        }
+        if (!isAdmin && userId != null) {
+            rp.eq(EquipmentRepair::getUserId, userId);
+        }
+        List<EquipmentRepair> repairList = repairMapper.selectList(rp);
         stats.setTotalRepair((long) repairList.size());
         
         Map<Integer, Long> repairStatusCount = new HashMap<>();
@@ -112,26 +338,34 @@ public class DashboardServiceImpl implements DashboardService {
     }
     
     @Override
-    public List<EquipmentStatusCount> getEquipmentStatusCount() {
-        List<Equipment> equipmentList = equipmentMapper.selectList(new LambdaQueryWrapper<>());
+    public List<EquipmentStatusCount> getEquipmentStatusCount(String equipmentType, Long equipmentId, Long userId, String role) {
+        boolean isAdmin = "admin".equals(role);
         
-        Map<Integer, Long> statusCount = new HashMap<>();
-        for (Equipment equipment : equipmentList) {
-            Integer status = equipment.getEquipmentStatus();
-            statusCount.put(status, statusCount.getOrDefault(status, 0L) + 1);
+        Set<Long> filteredEquipmentIds = getFilteredEquipmentIds(equipmentType, equipmentId);
+        
+        if (!isAdmin && userId != null) {
+            Set<Long> userEquipmentIds = getUserEquipmentIds(userId);
+            if (equipmentId == null && equipmentType == null) {
+                filteredEquipmentIds = userEquipmentIds;
+            }
         }
         
+        Map<String, Long> currentStatusCount = calculateCurrentStatusCount(filteredEquipmentIds, userId, isAdmin);
+        
+        long totalCount = currentStatusCount.values().stream().mapToLong(Long::longValue).sum();
+        
         List<EquipmentStatusCount> result = new ArrayList<>();
+        String[] statusKeys = {"repairing", "available", "reserved", "borrowed", "broken"};
         String[] statusTexts = {"维修中", "空闲", "被预约", "已借用", "故障"};
         
         for (int i = 0; i < 5; i++) {
             EquipmentStatusCount count = new EquipmentStatusCount();
             count.setStatus(String.valueOf(i));
             count.setStatusText(statusTexts[i]);
-            count.setCount(statusCount.getOrDefault(i, 0L));
+            count.setCount(currentStatusCount.getOrDefault(statusKeys[i], 0L));
             
-            if (equipmentList.size() > 0) {
-                count.setPercentage(Math.round((double) count.getCount() / equipmentList.size() * 10000) / 100.0);
+            if (totalCount > 0) {
+                count.setPercentage(Math.round((double) count.getCount() / totalCount * 10000) / 100.0);
             } else {
                 count.setPercentage(0.0);
             }
@@ -143,8 +377,19 @@ public class DashboardServiceImpl implements DashboardService {
     }
     
     @Override
-    public List<EquipmentUsageTrend> getEquipmentUsageTrend(String period) {
+    public List<EquipmentUsageTrend> getEquipmentUsageTrend(String period, String equipmentType, Long equipmentId, Long userId, String role) {
+        boolean isAdmin = "admin".equals(role);
+        
         List<EquipmentUsageTrend> result = new ArrayList<>();
+        
+        Set<Long> filteredEquipmentIds = getFilteredEquipmentIds(equipmentType, equipmentId);
+        
+        if (!isAdmin && userId != null) {
+            Set<Long> userEquipmentIds = getUserEquipmentIds(userId);
+            if (equipmentId == null && equipmentType == null) {
+                filteredEquipmentIds = userEquipmentIds;
+            }
+        }
         
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         int days = 7;
@@ -155,14 +400,69 @@ public class DashboardServiceImpl implements DashboardService {
             days = 90;
         }
         
+        LocalDateTime now = LocalDateTime.now();
+        
         for (int i = 0; i < days; i++) {
+            LocalDateTime targetDate = now.minusDays(days - 1 - i);
+            String dateStr = targetDate.format(formatter);
+            
             EquipmentUsageTrend trend = new EquipmentUsageTrend();
-            LocalDateTime date = LocalDateTime.now().minusDays(days - 1 - i);
-            trend.setDate(date.format(formatter));
-            trend.setBorrowCount(0L);
-            trend.setReserveCount(0L);
-            trend.setReturnCount(0L);
-            trend.setRepairCount(0L);
+            trend.setDate(dateStr);
+            
+            if (!filteredEquipmentIds.isEmpty()) {
+                LocalDateTime dayStart = targetDate.toLocalDate().atStartOfDay();
+                LocalDateTime dayEnd = dayStart.plusDays(1);
+                
+                // 统计预约次数
+                LambdaQueryWrapper<EquipmentReservation> resQuery = new LambdaQueryWrapper<>();
+                resQuery.in(EquipmentReservation::getEquipmentId, filteredEquipmentIds)
+                        .ge(EquipmentReservation::getCreateTime, dayStart)
+                        .lt(EquipmentReservation::getCreateTime, dayEnd);
+                if (!isAdmin && userId != null) {
+                    resQuery.eq(EquipmentReservation::getUserId, userId);
+                }
+                Long reserveCount = reservationMapper.selectCount(resQuery);
+                trend.setReserveCount(reserveCount);
+                
+                // 统计借用次数
+                LambdaQueryWrapper<EquipmentBorrow> borrowQuery = new LambdaQueryWrapper<>();
+                borrowQuery.in(EquipmentBorrow::getEquipmentId, filteredEquipmentIds)
+                         .ge(EquipmentBorrow::getCreateTime, dayStart)
+                         .lt(EquipmentBorrow::getCreateTime, dayEnd);
+                if (!isAdmin && userId != null) {
+                    borrowQuery.eq(EquipmentBorrow::getUserId, userId);
+                }
+                Long borrowCount = borrowMapper.selectCount(borrowQuery);
+                trend.setBorrowCount(borrowCount);
+                
+                // 统计归还次数
+                LambdaQueryWrapper<EquipmentReturn> returnQuery = new LambdaQueryWrapper<>();
+                returnQuery.in(EquipmentReturn::getEquipmentId, filteredEquipmentIds)
+                          .ge(EquipmentReturn::getCreateTime, dayStart)
+                          .lt(EquipmentReturn::getCreateTime, dayEnd);
+                if (!isAdmin && userId != null) {
+                    returnQuery.eq(EquipmentReturn::getUserId, userId);
+                }
+                Long returnCount = returnMapper.selectCount(returnQuery);
+                trend.setReturnCount(returnCount);
+                
+                // 统计报修次数
+                LambdaQueryWrapper<EquipmentRepair> repairQuery = new LambdaQueryWrapper<>();
+                repairQuery.in(EquipmentRepair::getEquipmentId, filteredEquipmentIds)
+                          .ge(EquipmentRepair::getCreateTime, dayStart)
+                          .lt(EquipmentRepair::getCreateTime, dayEnd);
+                if (!isAdmin && userId != null) {
+                    repairQuery.eq(EquipmentRepair::getUserId, userId);
+                }
+                Long repairCount = repairMapper.selectCount(repairQuery);
+                trend.setRepairCount(repairCount);
+            } else {
+                trend.setBorrowCount(0L);
+                trend.setReserveCount(0L);
+                trend.setReturnCount(0L);
+                trend.setRepairCount(0L);
+            }
+            
             result.add(trend);
         }
         
@@ -448,43 +748,108 @@ public class DashboardServiceImpl implements DashboardService {
     }
     
     @Override
-    public List<ReservationHotspot> getReservationHotspots(int limit) {
+    public List<ReservationHotspot> getReservationHotspots(Integer limit, String equipmentType, Long equipmentId, Long userId, String role) {
+        boolean isAdmin = "admin".equals(role);
+        
         List<ReservationHotspot> hotspots = new ArrayList<>();
         
         LambdaQueryWrapper<EquipmentReservation> query = new LambdaQueryWrapper<>();
         query.eq(EquipmentReservation::getReserveStatus, 1);
         
+        if (equipmentId != null) {
+            query.eq(EquipmentReservation::getEquipmentId, equipmentId);
+        }
+        
+        if (!isAdmin && userId != null) {
+            query.eq(EquipmentReservation::getUserId, userId);
+        }
+        
         List<EquipmentReservation> allReservations = reservationMapper.selectList(query);
         
         Map<Long, Integer> countMap = new HashMap<>();
         Map<Long, String> nameMap = new HashMap<>();
+        Map<Long, String> numberMap = new HashMap<>();
+        Map<Long, String> typeMap = new HashMap<>();
+        
+        Map<Long, String> typeIdToNameMap = new HashMap<>();
+        Map<String, Long> nameToTypeIdMap = new HashMap<>();
+        List<EquipmentType> allTypes = equipmentTypeMapper.selectList(new LambdaQueryWrapper<>());
+        for (EquipmentType t : allTypes) {
+            typeIdToNameMap.put(t.getId(), t.getTypeName());
+            nameToTypeIdMap.put(t.getTypeName(), t.getId());
+        }
+        
+        Set<Long> filteredEquipmentIds = new HashSet<>();
+        LambdaQueryWrapper<Equipment> allEquipmentQuery = new LambdaQueryWrapper<>();
+        List<Equipment> allEquipmentList = equipmentMapper.selectList(allEquipmentQuery);
+        for (Equipment e : allEquipmentList) {
+            nameMap.put(e.getId(), e.getEquipmentName());
+            numberMap.put(e.getId(), e.getEquipmentNumber());
+            String typeName = typeIdToNameMap.getOrDefault(e.getEquipmentTypeId(), "");
+            typeMap.put(e.getId(), typeName);
+        }
+        
+        if (equipmentType != null && !equipmentType.isEmpty()) {
+            Long typeId = nameToTypeIdMap.get(equipmentType);
+            if (typeId != null) {
+                LambdaQueryWrapper<Equipment> equipmentQuery = new LambdaQueryWrapper<>();
+                equipmentQuery.eq(Equipment::getEquipmentTypeId, typeId);
+                List<Equipment> equipmentList = equipmentMapper.selectList(equipmentQuery);
+                for (Equipment e : equipmentList) {
+                    filteredEquipmentIds.add(e.getId());
+                }
+            }
+        }
         
         for (EquipmentReservation r : allReservations) {
             if (r.getEquipmentId() != null) {
-                countMap.put(r.getEquipmentId(), countMap.getOrDefault(r.getEquipmentId(), 0) + 1);
-                if (r.getEquipmentName() != null) {
-                    nameMap.put(r.getEquipmentId(), r.getEquipmentName());
+                if (equipmentType != null && !equipmentType.isEmpty() && !filteredEquipmentIds.contains(r.getEquipmentId())) {
+                    continue;
                 }
+                countMap.put(r.getEquipmentId(), countMap.getOrDefault(r.getEquipmentId(), 0) + 1);
             }
         }
         
         for (Map.Entry<Long, Integer> entry : countMap.entrySet()) {
             ReservationHotspot hotspot = new ReservationHotspot();
+            hotspot.setEquipmentId(entry.getKey());
             hotspot.setEquipmentName(nameMap.getOrDefault(entry.getKey(), "未知设备"));
+            hotspot.setEquipmentNumber(numberMap.getOrDefault(entry.getKey(), ""));
+            hotspot.setEquipmentType(typeMap.getOrDefault(entry.getKey(), ""));
             hotspot.setReservationCount(entry.getValue());
             hotspots.add(hotspot);
         }
         
         hotspots.sort((a, b) -> b.getReservationCount().compareTo(a.getReservationCount()));
         
-        return hotspots.subList(0, Math.min(hotspots.size(), limit));
+        if (limit != null && limit > 0) {
+            return hotspots.subList(0, Math.min(hotspots.size(), limit));
+        }
+        return hotspots;
     }
     
     @Override
-    public RepairStatistics getRepairStatistics() {
+    public RepairStatistics getRepairStatistics(String equipmentType, Long equipmentId, Long userId, String role) {
+        boolean isAdmin = "admin".equals(role);
+        
         RepairStatistics stats = new RepairStatistics();
         
-        List<EquipmentRepair> repairList = repairMapper.selectList(new LambdaQueryWrapper<>());
+        LambdaQueryWrapper<EquipmentRepair> query = new LambdaQueryWrapper<>();
+        
+        if (equipmentId != null) {
+            query.eq(EquipmentRepair::getEquipmentId, equipmentId);
+        } else if (equipmentType != null && !equipmentType.isEmpty()) {
+            Set<Long> filteredIds = getFilteredEquipmentIds(equipmentType, null);
+            if (!filteredIds.isEmpty()) {
+                query.in(EquipmentRepair::getEquipmentId, filteredIds);
+            }
+        }
+        
+        if (!isAdmin && userId != null) {
+            query.eq(EquipmentRepair::getUserId, userId);
+        }
+        
+        List<EquipmentRepair> repairList = repairMapper.selectList(query);
         stats.setTotalRepairs(repairList.size());
         
         Map<Integer, Long> statusCount = new HashMap<>();
