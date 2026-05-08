@@ -184,4 +184,9 @@ public class EquipmentRepairServiceImpl extends ServiceImpl<EquipmentRepairMappe
         
         return true;
     }
+    
+    @Override
+    public Long getUserPendingRepairQuantity(Long equipmentId, Long userId) {
+        return baseMapper.getUserPendingRepairQuantity(equipmentId, userId);
+    }
 }

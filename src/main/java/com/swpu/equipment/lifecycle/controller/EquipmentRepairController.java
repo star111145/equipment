@@ -76,11 +76,20 @@ public class EquipmentRepairController {
         
         boolean isAdmin = "admin".equals(role);
         
+        System.out.println("========================================");
+        System.out.println("【报修验证】isAdmin=" + isAdmin + ", role=" + role);
+        System.out.println("========================================");
+        
+        if (repair.getRepairQuantity() == null || repair.getRepairQuantity() <= 0) {
+            return Result.error("报修数量必须大于0");
+        }
+        
         if (isAdmin) {
             Integer stockQuantity = equipment.getStockQuantity();
             if (stockQuantity == null) {
                 stockQuantity = 0;
             }
+            System.out.println("【报修验证-管理员】库存数量=" + stockQuantity + ", 报修数量=" + repair.getRepairQuantity());
             if (repair.getRepairQuantity() > stockQuantity) {
                 return Result.error("报修数量不能超过库存数量");
             }
@@ -88,6 +97,11 @@ public class EquipmentRepairController {
             Long userBorrowQuantity = equipmentBorrowService.getUserUnreturnedBorrowQuantity(repair.getEquipmentId(), userId);
             if (userBorrowQuantity == null) {
                 userBorrowQuantity = 0L;
+            }
+            Long userPendingRepairQuantity = equipmentRepairService.getUserPendingRepairQuantity(repair.getEquipmentId(), userId);
+            System.out.println("【报修验证-用户】用户Id=" + userId + ", 设备Id=" + repair.getEquipmentId() + ", 未归还=" + userBorrowQuantity + ", 待审核报修=" + userPendingRepairQuantity + ", 申请报修=" + repair.getRepairQuantity());
+            if (userPendingRepairQuantity != null && userPendingRepairQuantity > 0) {
+                return Result.error("您有待处理的报修申请，请等待审核完成后再提交新的报修");
             }
             if (repair.getRepairQuantity() > userBorrowQuantity) {
                 return Result.error("报修数量不能超过您的借出数量");

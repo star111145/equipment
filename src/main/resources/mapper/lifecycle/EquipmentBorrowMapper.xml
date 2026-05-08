@@ -101,12 +101,19 @@
     </select>
 
     <select id="getUserUnreturnedBorrowQuantity" resultType="java.lang.Long">
-        SELECT COALESCE(SUM(borrow_quantity), 0)
+        SELECT COALESCE(SUM(
+            borrow_quantity - COALESCE((
+                SELECT SUM(er.repair_quantity) 
+                FROM equipment_return er 
+                WHERE er.borrow_id = equipment_borrow.id 
+                AND er.return_status = 1
+                AND er.repair_quantity IS NOT NULL
+            ), 0)
+        ), 0)
         FROM equipment_borrow
         WHERE equipment_id = #{equipmentId}
         AND user_id = #{userId}
         AND borrow_status = 1
-        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1)
     </select>
 
     <select id="countUserBorrowedEquipment" resultType="java.lang.Long">
@@ -124,7 +131,13 @@
         WHERE equipment_id = #{equipmentId} 
         AND user_id = #{userId}
         AND borrow_status = 1
-        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1)
+        AND borrow_quantity > COALESCE((
+            SELECT SUM(er.repair_quantity) 
+            FROM equipment_return er 
+            WHERE er.borrow_id = equipment_borrow.id 
+            AND er.return_status = 1
+            AND er.repair_quantity IS NOT NULL
+        ), 0)
     </select>
 
     <select id="findUnreturnedBorrowsByEquipment" resultMap="BaseResultMap">
@@ -132,7 +145,13 @@
         FROM equipment_borrow 
         WHERE equipment_id = #{equipmentId}
         AND borrow_status = 1
-        AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1)
+        AND borrow_quantity > COALESCE((
+            SELECT SUM(er.repair_quantity) 
+            FROM equipment_return er 
+            WHERE er.borrow_id = equipment_borrow.id 
+            AND er.return_status = 1
+            AND er.repair_quantity IS NOT NULL
+        ), 0)
     </select>
 
     <select id="getPageListWithType" resultMap="BorrowVOResultMap">

@@ -13,4 +13,6 @@ public interface EquipmentRepairService extends IService<EquipmentRepair> {
     boolean cancelRepair(Long id);
 
     IPage<EquipmentRepair> getPageListWithType(Page<EquipmentRepair> page, Long userId, Integer repairStatus, Integer auditStatus, String keyword);
+    
+    Long getUserPendingRepairQuantity(Long equipmentId, Long userId);
 }

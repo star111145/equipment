@@ -58,7 +58,8 @@ public interface EquipmentMapper extends BaseMapper<Equipment> {
     @Select("SELECT COALESCE(SUM(er.repair_quantity), 0) " +
             "FROM equipment_repair er " +
             "WHERE er.equipment_id = #{equipmentId} " +
-            "AND er.repair_status = 1")
+            "AND er.repair_status = 1 " +
+            "AND er.audit_status = 1")
     Integer selectSumFaulty(@Param("equipmentId") Long equipmentId);
     
     /**

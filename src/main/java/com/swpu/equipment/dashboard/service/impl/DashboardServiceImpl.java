@@ -172,7 +172,8 @@ public class DashboardServiceImpl implements DashboardService {
         
         LambdaQueryWrapper<EquipmentBorrow> borrowQuery = new LambdaQueryWrapper<>();
         borrowQuery.in(EquipmentBorrow::getEquipmentId, allEquipmentIds)
-                  .eq(EquipmentBorrow::getBorrowStatus, 1);
+                  .eq(EquipmentBorrow::getBorrowStatus, 1)
+                  .eq(EquipmentBorrow::getAuditStatus, 1);
         List<EquipmentBorrow> allBorrows = borrowMapper.selectList(borrowQuery);
         
         Set<Long> borrowedEquipmentIds = new HashSet<>();
@@ -182,10 +183,11 @@ public class DashboardServiceImpl implements DashboardService {
             }
         }
         
-        // 查询维修中的设备（报修状态=1）
+        // 查询维修中的设备（报修状态=1且已审核）
         LambdaQueryWrapper<EquipmentRepair> repairQuery = new LambdaQueryWrapper<>();
         repairQuery.in(EquipmentRepair::getEquipmentId, allEquipmentIds)
-                  .eq(EquipmentRepair::getRepairStatus, 1);
+                  .eq(EquipmentRepair::getRepairStatus, 1)
+                  .eq(EquipmentRepair::getAuditStatus, 1);
         List<EquipmentRepair> allRepairs = repairMapper.selectList(repairQuery);
         
         Set<Long> repairingEquipmentIds = new HashSet<>();
@@ -195,21 +197,35 @@ public class DashboardServiceImpl implements DashboardService {
             }
         }
         
-        // 统计设备状态：只按实际预约/借用/维修记录计算
-        // 设备表的静态状态仅作为管理员提醒，不参与统计计算
+        // 查询借出的设备数量
+        Map<Long, Long> borrowedCountMap = new HashMap<>();
+        for (EquipmentBorrow b : allBorrows) {
+            if (b.getEquipmentId() != null) {
+                Long currentBorrowed = borrowedCountMap.getOrDefault(b.getEquipmentId(), 0L);
+                borrowedCountMap.put(b.getEquipmentId(), currentBorrowed + (b.getBorrowQuantity() != null ? b.getBorrowQuantity() : 1));
+            }
+        }
+        
+        // 查询维修中的设备数量
+        Map<Long, Long> repairingCountMap = new HashMap<>();
+        for (EquipmentRepair r : allRepairs) {
+            if (r.getEquipmentId() != null) {
+                Long currentRepairing = repairingCountMap.getOrDefault(r.getEquipmentId(), 0L);
+                repairingCountMap.put(r.getEquipmentId(), currentRepairing + (r.getRepairQuantity() != null ? r.getRepairQuantity() : 1));
+            }
+        }
+        
+        // 统计设备状态：按实际数量计算（只扣减借用和故障数量）
         for (Equipment e : allEquipment) {
             int stock = e.getStockQuantity() != null ? e.getStockQuantity() : 1;
+            long borrowed = borrowedCountMap.getOrDefault(e.getId(), 0L);
+            long repairing = repairingCountMap.getOrDefault(e.getId(), 0L);
             
-            // 按实际预约/借用/维修状态计算
-            if (repairingEquipmentIds.contains(e.getId())) {
-                statusCount.put("repairing", statusCount.getOrDefault("repairing", 0L) + stock);
-            } else if (reservedEquipmentIds.contains(e.getId())) {
-                statusCount.put("reserved", statusCount.getOrDefault("reserved", 0L) + stock);
-            } else if (borrowedEquipmentIds.contains(e.getId())) {
-                statusCount.put("borrowed", statusCount.getOrDefault("borrowed", 0L) + stock);
-            } else {
-                statusCount.put("available", statusCount.getOrDefault("available", 0L) + stock);
-            }
+            long available = stock - borrowed - repairing;
+            
+            statusCount.put("repairing", statusCount.getOrDefault("repairing", 0L) + repairing);
+            statusCount.put("borrowed", statusCount.getOrDefault("borrowed", 0L) + borrowed);
+            statusCount.put("available", statusCount.getOrDefault("available", 0L) + Math.max(0, available));
         }
         
         return statusCount;
@@ -223,11 +239,13 @@ public class DashboardServiceImpl implements DashboardService {
         
         Set<Long> filteredEquipmentIds = getFilteredEquipmentIds(equipmentType, equipmentId);
         
+        // 用户过滤的设备列表（只用于预约/报修统计）
+        Set<Long> userFilteredEquipmentIds = new HashSet<>(filteredEquipmentIds);
         Set<Long> userEquipmentIds = new HashSet<>();
         if (!isAdmin && userId != null) {
             userEquipmentIds = getUserEquipmentIds(userId);
             if (equipmentId == null && equipmentType == null) {
-                filteredEquipmentIds = userEquipmentIds;
+                userFilteredEquipmentIds = userEquipmentIds;
             }
         }
         
@@ -245,9 +263,6 @@ public class DashboardServiceImpl implements DashboardService {
                 eq.eq(Equipment::getEquipmentTypeId, typeId);
             }
         }
-        if (!isAdmin && userId != null && equipmentId == null && equipmentType == null) {
-            eq.in(Equipment::getId, userEquipmentIds);
-        }
         List<Equipment> equipmentList = equipmentMapper.selectList(eq);
         
         long totalStock = 0;
@@ -256,7 +271,7 @@ public class DashboardServiceImpl implements DashboardService {
         }
         stats.setTotalEquipment(totalStock);
         
-        Map<String, Long> currentStatusCount = calculateCurrentStatusCount(filteredEquipmentIds, userId, isAdmin);
+        Map<String, Long> currentStatusCount = calculateCurrentStatusCount(filteredEquipmentIds, null, true);
         
         stats.setAvailableEquipment(currentStatusCount.getOrDefault("available", 0L));
         stats.setReservedEquipment(currentStatusCount.getOrDefault("reserved", 0L));
@@ -267,8 +282,8 @@ public class DashboardServiceImpl implements DashboardService {
         LambdaQueryWrapper<EquipmentReservation> rq = new LambdaQueryWrapper<>();
         if (equipmentId != null) {
             rq.eq(EquipmentReservation::getEquipmentId, equipmentId);
-        } else if (!filteredEquipmentIds.isEmpty()) {
-            rq.in(EquipmentReservation::getEquipmentId, filteredEquipmentIds);
+        } else if (!userFilteredEquipmentIds.isEmpty()) {
+            rq.in(EquipmentReservation::getEquipmentId, userFilteredEquipmentIds);
         }
         if (!isAdmin && userId != null) {
             rq.eq(EquipmentReservation::getUserId, userId);
@@ -290,8 +305,8 @@ public class DashboardServiceImpl implements DashboardService {
         LambdaQueryWrapper<EquipmentBorrow> bk = new LambdaQueryWrapper<>();
         if (equipmentId != null) {
             bk.eq(EquipmentBorrow::getEquipmentId, equipmentId);
-        } else if (!filteredEquipmentIds.isEmpty()) {
-            bk.in(EquipmentBorrow::getEquipmentId, filteredEquipmentIds);
+        } else if (!userFilteredEquipmentIds.isEmpty()) {
+            bk.in(EquipmentBorrow::getEquipmentId, userFilteredEquipmentIds);
         }
         if (!isAdmin && userId != null) {
             bk.eq(EquipmentBorrow::getUserId, userId);
@@ -312,8 +327,8 @@ public class DashboardServiceImpl implements DashboardService {
         LambdaQueryWrapper<EquipmentRepair> rp = new LambdaQueryWrapper<>();
         if (equipmentId != null) {
             rp.eq(EquipmentRepair::getEquipmentId, equipmentId);
-        } else if (!filteredEquipmentIds.isEmpty()) {
-            rp.in(EquipmentRepair::getEquipmentId, filteredEquipmentIds);
+        } else if (!userFilteredEquipmentIds.isEmpty()) {
+            rp.in(EquipmentRepair::getEquipmentId, userFilteredEquipmentIds);
         }
         if (!isAdmin && userId != null) {
             rp.eq(EquipmentRepair::getUserId, userId);
@@ -355,10 +370,10 @@ public class DashboardServiceImpl implements DashboardService {
         long totalCount = currentStatusCount.values().stream().mapToLong(Long::longValue).sum();
         
         List<EquipmentStatusCount> result = new ArrayList<>();
-        String[] statusKeys = {"repairing", "available", "reserved", "borrowed", "broken"};
-        String[] statusTexts = {"维修中", "空闲", "被预约", "已借用", "故障"};
+        String[] statusKeys = {"repairing", "available", "borrowed"};
+        String[] statusTexts = {"故障", "空闲", "已借用"};
         
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 3; i++) {
             EquipmentStatusCount count = new EquipmentStatusCount();
             count.setStatus(String.valueOf(i));
             count.setStatusText(statusTexts[i]);
@@ -668,6 +683,7 @@ public class DashboardServiceImpl implements DashboardService {
         
         LambdaQueryWrapper<EquipmentRepair> repairQuery = new LambdaQueryWrapper<>();
         repairQuery.eq(EquipmentRepair::getRepairStatus, 1)
+                .eq(EquipmentRepair::getAuditStatus, 1)
                 .orderByDesc(EquipmentRepair::getCreateTime)
                 .last("LIMIT 5");
         List<EquipmentRepair> repairs = repairMapper.selectList(repairQuery);

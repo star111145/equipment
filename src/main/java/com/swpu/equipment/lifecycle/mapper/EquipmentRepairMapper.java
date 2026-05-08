@@ -29,6 +29,14 @@ public interface EquipmentRepairMapper extends BaseMapper<EquipmentRepair> {
      */
     Boolean selectHasPendingRepair(@Param("equipmentId") Long equipmentId);
     
+    /**
+     * 获取用户对设备的待处理报修数量（待审核+报修中）
+     */
+    Long getUserPendingRepairQuantity(@Param("equipmentId") Long equipmentId, @Param("userId") Long userId);
+    
+    /**
+     * 统计待处理报修数量
+     */
     int countPendingRepairs(@Param("userId") Long userId, @Param("equipmentId") Long equipmentId);
 
     /**

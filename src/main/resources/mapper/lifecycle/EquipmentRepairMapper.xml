@@ -116,4 +116,12 @@
         ORDER BY r.create_time DESC
     </select>
 
+    <select id="getUserPendingRepairQuantity" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(repair_quantity), 0)
+        FROM equipment_repair
+        WHERE equipment_id = #{equipmentId}
+        AND user_id = #{userId}
+        AND repair_status = 0
+    </select>
+
 </mapper>
