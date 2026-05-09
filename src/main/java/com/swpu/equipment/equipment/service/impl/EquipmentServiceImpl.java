@@ -16,6 +16,7 @@ import com.swpu.equipment.lifecycle.mapper.EquipmentRepairMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,11 +30,23 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
     
     private static final Logger log = LoggerFactory.getLogger(EquipmentServiceImpl.class);
     
+    @Value("${mobile.base-url:http://localhost:5173}")
+    private String mobileBaseUrl;
+    
     @Autowired
     private EquipmentBorrowMapper borrowMapper;
     
     @Autowired
     private EquipmentRepairMapper repairMapper;
+    
+    @Autowired
+    private com.swpu.equipment.equipment.service.EquipmentTypeService equipmentTypeService;
+    
+    @Autowired
+    private com.swpu.equipment.supplier.service.SupplierService supplierService;
+    
+    @Autowired
+    private com.swpu.equipment.warehouse.service.WarehouseService warehouseService;
 
     @Transactional
     @Override
@@ -41,7 +54,7 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
         boolean saved = super.save(equipment);
         if (saved && equipment.getEquipmentNumber() != null) {
             try {
-                String qrcodeContent = equipment.getEquipmentNumber();
+                String qrcodeContent = mobileBaseUrl + "/mobile/device?equipmentNumber=" + equipment.getEquipmentNumber();
                 String qrcodeUrl = QrCodeUtil.generateQrCode(qrcodeContent, equipment.getEquipmentNumber());
                 
                 Equipment updateEquipment = new Equipment();
@@ -101,20 +114,59 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
     }
 
     @Override
+    public EquipmentVO getEquipmentByNumber(String equipmentNumber) {
+        return baseMapper.getEquipmentByNumber(equipmentNumber);
+    }
+
+    @Override
     public List<String> getEquipmentTypes() {
         return baseMapper.getEquipmentTypes();
     }
 
     @Override
     public List<EquipmentExcelData> exportEquipmentList() {
-        List<Equipment> equipmentList = baseMapper.selectList(new LambdaQueryWrapper<>());
+        return exportEquipmentList(null, null, false, 1, Integer.MAX_VALUE);
+    }
+    
+    @Override
+    public List<EquipmentExcelData> exportEquipmentList(String keyword, String equipmentType, Boolean exportAll, Integer current, Integer size) {
+        if (exportAll == null) {
+            exportAll = false;
+        }
+        int querySize = exportAll ? 100000 : size;
+        
+        LambdaQueryWrapper<Equipment> wrapper = new LambdaQueryWrapper<>();
+        
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            wrapper.and(w -> w
+                .like(Equipment::getEquipmentNumber, keyword)
+                .or()
+                .like(Equipment::getEquipmentName, keyword)
+            );
+        }
+        
+        if (equipmentType != null && !equipmentType.trim().isEmpty()) {
+            wrapper.eq(Equipment::getEquipmentType, equipmentType);
+        }
+        
+        wrapper.last("ORDER BY id LIMIT " + querySize);
+        
+        List<Equipment> equipmentList = baseMapper.selectList(wrapper);
         List<EquipmentExcelData> excelDataList = new ArrayList<>();
         
         for (Equipment equipment : equipmentList) {
             EquipmentExcelData data = new EquipmentExcelData();
             data.setEquipmentNumber(equipment.getEquipmentNumber());
             data.setEquipmentName(equipment.getEquipmentName());
-            data.setEquipmentType(equipment.getEquipmentType() != null ? equipment.getEquipmentType() : "未设置");
+            
+            String typeName = "未设置";
+            if (equipment.getEquipmentTypeId() != null) {
+                com.swpu.equipment.equipment.entity.EquipmentType type = equipmentTypeService.getById(equipment.getEquipmentTypeId());
+                if (type != null) {
+                    typeName = type.getTypeName();
+                }
+            }
+            data.setEquipmentType(typeName);
             
             String statusText = "未知";
             switch (equipment.getEquipmentStatus()) {
@@ -126,9 +178,28 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
             }
             data.setEquipmentStatus(statusText);
             
-            data.setEquipmentLocation(equipment.getEquipmentLocation() != null ? equipment.getEquipmentLocation() : "未设置");
+            String warehouseName = "未设置";
+            String warehouseLocation = "未设置";
+            if (equipment.getWarehouseId() != null) {
+                com.swpu.equipment.warehouse.entity.Warehouse warehouse = warehouseService.getById(equipment.getWarehouseId());
+                if (warehouse != null) {
+                    warehouseName = warehouse.getWarehouseName() != null ? warehouse.getWarehouseName() : "未设置";
+                    warehouseLocation = warehouse.getWarehouseLocation() != null ? warehouse.getWarehouseLocation() : "未设置";
+                }
+            }
+            data.setWarehouseName(warehouseName);
+            data.setWarehouseLocation(warehouseLocation);
+            
             data.setStockQuantity(equipment.getStockQuantity() != null ? equipment.getStockQuantity() : 0);
-            data.setSupplier(equipment.getSupplier() != null ? equipment.getSupplier() : "未设置");
+            
+            String supplierName = "未设置";
+            if (equipment.getSupplierId() != null) {
+                com.swpu.equipment.supplier.entity.Supplier supplier = supplierService.getById(equipment.getSupplierId());
+                if (supplier != null) {
+                    supplierName = supplier.getSupplierName();
+                }
+            }
+            data.setSupplier(supplierName);
             data.setDescription(equipment.getDescription() != null ? equipment.getDescription() : "无");
             
             excelDataList.add(data);
@@ -146,7 +217,15 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
             EquipmentExcelData data = new EquipmentExcelData();
             data.setEquipmentNumber(equipment.getEquipmentNumber());
             data.setEquipmentName(equipment.getEquipmentName());
-            data.setEquipmentType(equipment.getEquipmentType() != null ? equipment.getEquipmentType() : "未设置");
+            
+            String typeName = "未设置";
+            if (equipment.getEquipmentTypeId() != null) {
+                com.swpu.equipment.equipment.entity.EquipmentType type = equipmentTypeService.getById(equipment.getEquipmentTypeId());
+                if (type != null) {
+                    typeName = type.getTypeName();
+                }
+            }
+            data.setEquipmentType(typeName);
             
             String statusText = "未知";
             switch (equipment.getEquipmentStatus()) {
@@ -158,9 +237,28 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
             }
             data.setEquipmentStatus(statusText);
             
-            data.setEquipmentLocation(equipment.getEquipmentLocation() != null ? equipment.getEquipmentLocation() : "未设置");
+            String warehouseName = "未设置";
+            String warehouseLocation = "未设置";
+            if (equipment.getWarehouseId() != null) {
+                com.swpu.equipment.warehouse.entity.Warehouse warehouse = warehouseService.getById(equipment.getWarehouseId());
+                if (warehouse != null) {
+                    warehouseName = warehouse.getWarehouseName() != null ? warehouse.getWarehouseName() : "未设置";
+                    warehouseLocation = warehouse.getWarehouseLocation() != null ? warehouse.getWarehouseLocation() : "未设置";
+                }
+            }
+            data.setWarehouseName(warehouseName);
+            data.setWarehouseLocation(warehouseLocation);
+            
             data.setStockQuantity(equipment.getStockQuantity() != null ? equipment.getStockQuantity() : 0);
-            data.setSupplier(equipment.getSupplier() != null ? equipment.getSupplier() : "未设置");
+            
+            String supplierName = "未设置";
+            if (equipment.getSupplierId() != null) {
+                com.swpu.equipment.supplier.entity.Supplier supplier = supplierService.getById(equipment.getSupplierId());
+                if (supplier != null) {
+                    supplierName = supplier.getSupplierName();
+                }
+            }
+            data.setSupplier(supplierName);
             data.setDescription(equipment.getDescription() != null ? equipment.getDescription() : "无");
             
             excelDataList.add(data);

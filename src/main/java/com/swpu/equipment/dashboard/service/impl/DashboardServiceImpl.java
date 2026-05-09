@@ -2,6 +2,7 @@ package com.swpu.equipment.dashboard.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.swpu.equipment.dashboard.entity.*;
+import com.swpu.equipment.dashboard.export.DashboardExcelData;
 import com.swpu.equipment.dashboard.service.DashboardService;
 import com.swpu.equipment.equipment.entity.Equipment;
 import com.swpu.equipment.equipment.entity.EquipmentType;
@@ -763,6 +764,23 @@ public class DashboardServiceImpl implements DashboardService {
         }
     }
     
+    private LocalDateTime getStartTimeByPeriod(String period) {
+        LocalDateTime now = LocalDateTime.now();
+        if (period == null) {
+            return null;
+        }
+        switch (period) {
+            case "week":
+                return now.minusDays(7);
+            case "month":
+                return now.minusDays(30);
+            case "semester":
+                return now.minusDays(120);
+            default:
+                return null;
+        }
+    }
+    
     @Override
     public List<ReservationHotspot> getReservationHotspots(Integer limit, String equipmentType, Long equipmentId, Long userId, String role) {
         boolean isAdmin = "admin".equals(role);
@@ -891,5 +909,178 @@ public class DashboardServiceImpl implements DashboardService {
         stats.setAverageProcessingTime(count > 0 ? Math.round(totalTime / count * 10) / 10.0 : 0.0);
         
         return stats;
+    }
+    
+    @Override
+    public List<DashboardExcelData> getExportData(String reportType, String equipmentType, Long equipmentId, Long userId, String role, String period) {
+        List<DashboardExcelData> dataList = new ArrayList<>();
+        
+        Set<Long> equipmentIds = getFilteredEquipmentIds(equipmentType, equipmentId);
+        
+        LocalDateTime startTime = getStartTimeByPeriod(period);
+        
+        if ("all".equals(reportType) || "statistics".equals(reportType)) {
+            DashboardStatistics statistics = getDashboardStatistics(equipmentType, equipmentId, userId, role);
+            
+            DashboardExcelData statData = new DashboardExcelData();
+            statData.setStatType("概览统计");
+            statData.setEquipmentName("全部设备");
+            statData.setCount(statistics.getTotalEquipment() != null ? statistics.getTotalEquipment().intValue() : 0);
+            statData.setRemark("设备总数");
+            dataList.add(statData);
+            
+            DashboardExcelData availableData = new DashboardExcelData();
+            availableData.setStatType("概览统计");
+            availableData.setEquipmentName("全部设备");
+            availableData.setCount(statistics.getAvailableEquipment() != null ? statistics.getAvailableEquipment().intValue() : 0);
+            availableData.setRemark("可用设备数");
+            dataList.add(availableData);
+            
+            DashboardExcelData reservationData = new DashboardExcelData();
+            reservationData.setStatType("概览统计");
+            reservationData.setEquipmentName("全部设备");
+            reservationData.setCount(statistics.getTotalReservation() != null ? statistics.getTotalReservation().intValue() : 0);
+            reservationData.setRemark("预约申请总数");
+            dataList.add(reservationData);
+            
+            DashboardExcelData repairData = new DashboardExcelData();
+            repairData.setStatType("概览统计");
+            repairData.setEquipmentName("全部设备");
+            repairData.setCount(statistics.getTotalRepair() != null ? statistics.getTotalRepair().intValue() : 0);
+            repairData.setRemark("报修申请总数");
+            dataList.add(repairData);
+        }
+        
+        if ("all".equals(reportType) || "equipment_status".equals(reportType)) {
+            List<EquipmentStatusCount> statusCounts = getEquipmentStatusCount(equipmentType, equipmentId, userId, role);
+            
+            for (EquipmentStatusCount status : statusCounts) {
+                DashboardExcelData data = new DashboardExcelData();
+                data.setStatType("设备状态分布");
+                data.setCount(status.getCount() != null ? status.getCount().intValue() : 0);
+                data.setRemark(status.getStatusText());
+                dataList.add(data);
+            }
+        }
+        
+        if ("all".equals(reportType) || "usage_trend".equals(reportType)) {
+            List<EquipmentUsageTrend> trends = getEquipmentUsageTrend(period, equipmentType, equipmentId, userId, role);
+            
+            for (EquipmentUsageTrend trend : trends) {
+                DashboardExcelData data = new DashboardExcelData();
+                data.setStatType("使用趋势");
+                data.setDate(trend.getDate() != null ? trend.getDate().toString() : "");
+                data.setCount(trend.getBorrowCount() != null ? trend.getBorrowCount().intValue() : 0);
+                data.setRemark("借用次数");
+                dataList.add(data);
+                
+                DashboardExcelData reserveData = new DashboardExcelData();
+                reserveData.setStatType("使用趋势");
+                reserveData.setDate(trend.getDate() != null ? trend.getDate().toString() : "");
+                reserveData.setCount(trend.getReserveCount() != null ? trend.getReserveCount().intValue() : 0);
+                reserveData.setRemark("预约次数");
+                dataList.add(reserveData);
+            }
+        }
+        
+        if ("all".equals(reportType) || "reservation".equals(reportType)) {
+            LambdaQueryWrapper<EquipmentReservation> reserveQuery = new LambdaQueryWrapper<>();
+            if (equipmentIds != null && !equipmentIds.isEmpty()) {
+                reserveQuery.in(EquipmentReservation::getEquipmentId, equipmentIds);
+            }
+            if (userId != null && !"admin".equals(role)) {
+                reserveQuery.eq(EquipmentReservation::getUserId, userId);
+            }
+            if (startTime != null) {
+                reserveQuery.ge(EquipmentReservation::getCreateTime, startTime);
+            }
+            reserveQuery.orderByDesc(EquipmentReservation::getCreateTime);
+            reserveQuery.last("LIMIT 1000");
+            List<EquipmentReservation> reservations = reservationMapper.selectList(reserveQuery);
+            
+            for (EquipmentReservation res : reservations) {
+                DashboardExcelData data = new DashboardExcelData();
+                data.setStatType("预约记录");
+                data.setEquipmentName(res.getEquipmentName());
+                data.setEquipmentNumber(res.getEquipmentNumber());
+                if (res.getEquipmentTypeId() != null) {
+                    EquipmentType type = equipmentTypeMapper.selectById(res.getEquipmentTypeId());
+                    data.setEquipmentType(type != null ? type.getTypeName() : "");
+                } else {
+                    data.setEquipmentType("");
+                }
+                data.setDate(res.getCreateTime() != null ? res.getCreateTime().toString() : "");
+                data.setRemark(getReservationStatusText(res.getReserveStatus()));
+                dataList.add(data);
+            }
+        }
+        
+        if ("all".equals(reportType) || "borrow".equals(reportType)) {
+            List<EquipmentBorrow> borrows = borrowMapper.selectListWithDetails(equipmentIds, "admin".equals(role) ? null : userId, startTime);
+            
+            for (EquipmentBorrow borrow : borrows) {
+                DashboardExcelData data = new DashboardExcelData();
+                data.setStatType("借用记录");
+                data.setEquipmentName(borrow.getEquipmentName());
+                data.setEquipmentNumber(borrow.getEquipmentNumber());
+                data.setEquipmentType(borrow.getEquipmentType());
+                Integer qty = borrow.getOriginalQuantity() != null ? borrow.getOriginalQuantity() : borrow.getBorrowQuantity();
+                data.setCount(qty != null ? qty : 1);
+                data.setDate(borrow.getCreateTime() != null ? borrow.getCreateTime().toString() : "");
+                data.setRemark(getBorrowStatusText(borrow.getBorrowStatus()));
+                dataList.add(data);
+            }
+        }
+        
+        if ("all".equals(reportType) || "repair".equals(reportType)) {
+            LambdaQueryWrapper<EquipmentRepair> repairQuery = new LambdaQueryWrapper<>();
+            if (equipmentIds != null && !equipmentIds.isEmpty()) {
+                repairQuery.in(EquipmentRepair::getEquipmentId, equipmentIds);
+            }
+            if (userId != null && !"admin".equals(role)) {
+                repairQuery.eq(EquipmentRepair::getUserId, userId);
+            }
+            if (startTime != null) {
+                repairQuery.ge(EquipmentRepair::getCreateTime, startTime);
+            }
+            repairQuery.orderByDesc(EquipmentRepair::getCreateTime);
+            repairQuery.last("LIMIT 1000");
+            List<EquipmentRepair> repairs = repairMapper.selectList(repairQuery);
+            
+            for (EquipmentRepair repair : repairs) {
+                DashboardExcelData data = new DashboardExcelData();
+                data.setStatType("报修记录");
+                data.setEquipmentName(repair.getEquipmentName());
+                data.setEquipmentNumber(repair.getEquipmentNumber());
+                if (repair.getEquipmentTypeName() == null && repair.getEquipmentTypeId() != null) {
+                    EquipmentType type = equipmentTypeMapper.selectById(repair.getEquipmentTypeId());
+                    data.setEquipmentType(type != null ? type.getTypeName() : "");
+                } else {
+                    data.setEquipmentType(repair.getEquipmentTypeName());
+                }
+                data.setCount(repair.getRepairQuantity() != null ? repair.getRepairQuantity() : 1);
+                data.setDate(repair.getCreateTime() != null ? repair.getCreateTime().toString() : "");
+                data.setRemark(getRepairStatusText(repair.getRepairStatus()));
+                dataList.add(data);
+            }
+        }
+        
+        if ("all".equals(reportType) || "return".equals(reportType)) {
+            List<EquipmentReturn> returns = returnMapper.selectListWithDetails(equipmentIds, "admin".equals(role) ? null : userId, startTime);
+            
+            for (EquipmentReturn ret : returns) {
+                DashboardExcelData data = new DashboardExcelData();
+                data.setStatType("归还记录");
+                data.setEquipmentName(ret.getEquipmentName());
+                data.setEquipmentNumber(ret.getEquipmentNumber());
+                data.setEquipmentType(ret.getEquipmentType());
+                data.setCount(ret.getReturnQuantity() != null ? ret.getReturnQuantity() : 1);
+                data.setDate(ret.getCreateTime() != null ? ret.getCreateTime().toString() : "");
+                data.setRemark(getReturnStatusText(ret.getReturnStatus()));
+                dataList.add(data);
+            }
+        }
+        
+        return dataList;
     }
 }

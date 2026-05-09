@@ -45,6 +45,7 @@
         <result property="phone" column="phone"/>
         <result property="borrowQuantity" column="borrow_quantity"/>
         <result property="returnQuantity" column="return_quantity"/>
+        <result property="originalQuantity" column="original_quantity"/>
         <result property="borrowTime" column="borrow_time"/>
         <result property="expectedReturnTime" column="expected_return_time"/>
         <result property="purpose" column="purpose"/>
@@ -231,6 +232,59 @@
         AND borrow_status = 1
         AND expected_return_time &lt; NOW()
         AND NOT EXISTS (SELECT 1 FROM equipment_return er WHERE er.borrow_id = equipment_borrow.id AND er.return_status = 1)
+    </select>
+    
+    <select id="selectListWithDetails" resultMap="BorrowVOResultMap">
+        SELECT 
+            b.id,
+            b.equipment_id,
+            b.equipment_number,
+            b.equipment_name,
+            COALESCE(b.equipment_model, e.equipment_model) AS equipment_model,
+            COALESCE(b.equipment_image, e.equipment_image) AS equipment_image,
+            b.equipment_type_id,
+            et.type_name AS equipment_type,
+            b.user_id,
+            u.real_name AS real_name,
+            u.phone AS phone,
+            b.borrow_quantity + COALESCE((SELECT SUM(er.return_quantity) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1), 0) AS original_quantity,
+            b.borrow_quantity,
+            COALESCE((SELECT SUM(er.return_quantity) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1), 0) AS return_quantity,
+            b.borrow_time,
+            b.expected_return_time,
+            b.purpose,
+            b.borrow_status,
+            b.audit_status,
+            b.audit_user_id,
+            bu.real_name AS audit_user_name,
+            b.audit_time,
+            b.audit_result,
+            b.reserve_id,
+            b.create_time,
+            b.update_time,
+            (SELECT COUNT(*) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1) AS has_return,
+            (SELECT COUNT(*) FROM equipment_return er WHERE er.borrow_id = b.id AND er.return_status = 1 AND er.audit_result = '报修通过自动归还') AS has_repair_return
+        FROM equipment_borrow b
+        LEFT JOIN equipment e ON b.equipment_id = e.id
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN sys_user u ON b.user_id = u.id
+        LEFT JOIN sys_user bu ON b.audit_user_id = bu.id
+        <where>
+            <if test="equipmentIds != null and equipmentIds.size() > 0">
+                AND b.equipment_id IN
+                <foreach collection="equipmentIds" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+            </if>
+            <if test="userId != null">
+                AND b.user_id = #{userId}
+            </if>
+            <if test="startTime != null">
+                AND b.create_time &gt;= #{startTime}
+            </if>
+        </where>
+        ORDER BY b.create_time DESC
+        LIMIT 1000
     </select>
 
 </mapper>

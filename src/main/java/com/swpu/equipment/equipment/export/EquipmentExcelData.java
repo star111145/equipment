@@ -10,7 +10,8 @@ public class EquipmentExcelData {
     private String equipmentName;
     private String equipmentType;
     private String equipmentStatus;
-    private String equipmentLocation;
+    private String warehouseName;
+    private String warehouseLocation;
     private Integer stockQuantity;
     private String supplier;
     private String description;

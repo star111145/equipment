@@ -11,6 +11,8 @@ import com.swpu.equipment.lifecycle.entity.EquipmentReservationVO;
 import com.swpu.equipment.lifecycle.mapper.EquipmentBorrowMapper;
 import com.swpu.equipment.lifecycle.mapper.EquipmentReservationMapper;
 import com.swpu.equipment.lifecycle.service.EquipmentReservationService;
+import com.swpu.equipment.user.entity.User;
+import com.swpu.equipment.user.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +28,9 @@ public class EquipmentReservationServiceImpl extends ServiceImpl<EquipmentReserv
     
     @Autowired
     private EquipmentBorrowMapper borrowMapper;
+    
+    @Autowired
+    private UserService userService;
     
     @Override
     public IPage<EquipmentReservationVO> getPageList(Page<EquipmentReservationVO> page, String keyword, Integer status, Integer auditStatus) {
@@ -97,6 +102,12 @@ public class EquipmentReservationServiceImpl extends ServiceImpl<EquipmentReserv
         reservation.setAuditStatus(status);
         reservation.setAuditResult(comment);
         reservation.setAuditUserId(auditUserId);
+        
+        User auditUser = userService.getById(auditUserId);
+        if (auditUser != null) {
+            reservation.setAuditUserName(auditUser.getRealName());
+        }
+        
         reservation.setAuditTime(LocalDateTime.now());
         reservation.setReserveStatus(status == 1 ? 1 : 2);
         reservation.setUpdateTime(LocalDateTime.now());
@@ -220,7 +231,74 @@ public class EquipmentReservationServiceImpl extends ServiceImpl<EquipmentReserv
     }
     
     @Override
-    public List<EquipmentReservationVO> getReservationsForCalendar(Long equipmentId, LocalDateTime start, LocalDateTime end) {
-        return baseMapper.getCalendarReservations(equipmentId, start, end);
+    public List<EquipmentReservationVO> getReservationsForCalendar(Long equipmentId, Long equipmentTypeId, LocalDateTime start, LocalDateTime end) {
+        return baseMapper.getCalendarReservations(equipmentId, equipmentTypeId, start, end);
+    }
+    
+    @Override
+    public List<EquipmentReservationVO> getExportList(String keyword, Integer status, Integer auditStatus, Boolean exportAll, Integer current, Integer size) {
+        if (exportAll == null) {
+            exportAll = false;
+        }
+        int querySize = exportAll ? 100000 : size;
+        
+        LambdaQueryWrapper<EquipmentReservation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(keyword != null && !keyword.isEmpty(), EquipmentReservation::getEquipmentName, keyword)
+               .like(keyword != null && !keyword.isEmpty(), EquipmentReservation::getEquipmentNumber, keyword)
+               .like(keyword != null && !keyword.isEmpty(), EquipmentReservation::getRealName, keyword);
+        
+        if (status != null && status != -1) {
+            if (status == 4) {
+                wrapper.eq(EquipmentReservation::getReserveStatus, 1);
+                wrapper.apply("DATE_ADD(reserve_time, INTERVAL reserve_duration HOUR) < NOW()");
+            } else if (status == 1) {
+                wrapper.eq(EquipmentReservation::getReserveStatus, 1);
+                wrapper.apply("DATE_ADD(reserve_time, INTERVAL reserve_duration HOUR) > NOW()");
+            } else {
+                wrapper.eq(EquipmentReservation::getReserveStatus, status);
+            }
+        }
+        if (auditStatus != null && auditStatus != -1) {
+            wrapper.eq(EquipmentReservation::getAuditStatus, auditStatus);
+        }
+        
+        wrapper.orderByDesc(EquipmentReservation::getCreateTime);
+        
+        wrapper.last("LIMIT " + querySize);
+        
+        List<EquipmentReservation> list = list(wrapper);
+        
+        return list.stream().map(this::convertToVO).collect(java.util.stream.Collectors.toList());
+    }
+    
+    private EquipmentReservationVO convertToVO(EquipmentReservation reservation) {
+        EquipmentReservationVO vo = new EquipmentReservationVO();
+        vo.setId(reservation.getId());
+        vo.setEquipmentId(reservation.getEquipmentId());
+        vo.setEquipmentNumber(reservation.getEquipmentNumber());
+        vo.setEquipmentName(reservation.getEquipmentName());
+        vo.setEquipmentModel(reservation.getEquipmentModel());
+        vo.setEquipmentImage(reservation.getEquipmentImage());
+        vo.setUserId(reservation.getUserId());
+        vo.setUserName(reservation.getRealName());
+        vo.setUserPhone(reservation.getPhone());
+        vo.setReserveTime(reservation.getReserveTime());
+        vo.setReserveDuration(reservation.getReserveDuration());
+        vo.setPurpose(reservation.getPurpose());
+        vo.setReserveStatus(reservation.getReserveStatus());
+        vo.setAuditStatus(reservation.getAuditStatus());
+        vo.setAuditUserId(reservation.getAuditUserId());
+        vo.setAuditUserName(reservation.getAuditUserName());
+        vo.setAuditTime(reservation.getAuditTime());
+        vo.setAuditResult(reservation.getAuditResult());
+        vo.setCreateTime(reservation.getCreateTime());
+        
+        Equipment equipment = equipmentMapper.selectById(reservation.getEquipmentId());
+        if (equipment != null) {
+            vo.setAvailableQuantity(equipment.getAvailableQuantity());
+            vo.setEquipmentType(equipment.getEquipmentType());
+        }
+        
+        return vo;
     }
 }

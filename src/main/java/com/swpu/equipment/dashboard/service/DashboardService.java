@@ -1,6 +1,7 @@
 package com.swpu.equipment.dashboard.service;
 
 import com.swpu.equipment.dashboard.entity.*;
+import com.swpu.equipment.dashboard.export.DashboardExcelData;
 
 import java.util.List;
 
@@ -19,4 +20,6 @@ public interface DashboardService {
     List<ReservationHotspot> getReservationHotspots(Integer limit, String equipmentType, Long equipmentId, Long userId, String role);
     
     RepairStatistics getRepairStatistics(String equipmentType, Long equipmentId, Long userId, String role);
+    
+    List<DashboardExcelData> getExportData(String reportType, String equipmentType, Long equipmentId, Long userId, String role, String period);
 }

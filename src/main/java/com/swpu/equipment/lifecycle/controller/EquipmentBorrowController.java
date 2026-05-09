@@ -1,5 +1,6 @@
 package com.swpu.equipment.lifecycle.controller;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.swpu.equipment.common.util.Result;
@@ -15,12 +16,17 @@ import com.swpu.equipment.user.service.UserService;
 
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.swpu.equipment.common.websocket.WebSocketHandler;
 
@@ -364,4 +370,132 @@ public class EquipmentBorrowController {
             return Result.error("取消借用失败");
         }
     }
+    
+    @GetMapping("/export")
+    public void exportBorrow(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) Integer auditStatus,
+            @RequestParam(defaultValue = "false") Boolean exportAll,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size,
+            HttpServletResponse response) throws IOException {
+        if (exportAll == null) {
+            exportAll = false;
+        }
+        int querySize = exportAll ? 100000 : size;
+        Page<EquipmentBorrow> page = new Page<>(current, querySize);
+        IPage<EquipmentBorrow> result = equipmentBorrowService.getPageListWithType(page, null, status, auditStatus, keyword);
+        List<EquipmentBorrow> list = result.getRecords();
+        
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String fileName = "借用记录_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        response.setHeader("Content-disposition", "attachment;filename=" + fileName + ".xlsx");
+        
+        EasyExcel.write(response.getOutputStream(), BorrowExcelData.class)
+                .sheet("借用记录")
+                .doWrite(list.stream().map(this::convertToExcelData).collect(Collectors.toList()));
+    }
+    
+    private BorrowExcelData convertToExcelData(EquipmentBorrow borrow) {
+        BorrowExcelData data = new BorrowExcelData();
+        data.setId(borrow.getId() != null ? borrow.getId().intValue() : null);
+        data.setEquipmentName(borrow.getEquipmentName());
+        data.setEquipmentNumber(borrow.getEquipmentNumber());
+        data.setEquipmentModel(borrow.getEquipmentModel());
+        data.setUserName(borrow.getRealName());
+        data.setPhone(borrow.getPhone());
+        
+        Integer borrowQty = borrow.getOriginalQuantity() != null ? borrow.getOriginalQuantity() : borrow.getBorrowQuantity();
+        data.setBorrowQuantity(borrowQty != null ? borrowQty : 1);
+        
+        data.setBorrowTime(borrow.getBorrowTime() != null ? borrow.getBorrowTime().toString() : "");
+        data.setExpectedReturnTime(borrow.getExpectedReturnTime() != null ? borrow.getExpectedReturnTime().toString() : "");
+        data.setPurpose(borrow.getPurpose());
+        data.setStatus(getBorrowStatusText(borrow.getBorrowStatus(), borrow.getExpectedReturnTime()));
+        data.setAuditStatus(getAuditStatusText(borrow.getAuditStatus()));
+        data.setAuditUserName(borrow.getAuditUserName());
+        data.setAuditTime(borrow.getAuditTime() != null ? borrow.getAuditTime().toString() : "");
+        data.setAuditResult(borrow.getAuditResult());
+        data.setCreateTime(borrow.getCreateTime() != null ? borrow.getCreateTime().toString() : "");
+        return data;
+    }
+    
+    private String getBorrowStatusText(Integer status, LocalDateTime expectedReturnTime) {
+        if (status == null) return "";
+        if (status == 1 && expectedReturnTime != null && expectedReturnTime.isBefore(LocalDateTime.now())) {
+            return "已逾期";
+        }
+        switch (status) {
+            case 0: return "待审核";
+            case 1: return "已借出";
+            case 2: return "已完成";
+            case 3: return "已取消";
+            case 4: return "已拒绝";
+            default: return "未知";
+        }
+    }
+    
+    private String getAuditStatusText(Integer status) {
+        if (status == null) return "";
+        switch (status) {
+            case 0: return "待审核";
+            case 1: return "已通过";
+            case 2: return "已拒绝";
+            default: return "未知";
+        }
+    }
+}
+
+class BorrowExcelData {
+    private Integer id;
+    private String equipmentName;
+    private String equipmentNumber;
+    private String equipmentModel;
+    private String userName;
+    private String phone;
+    private Integer borrowQuantity;
+    private String borrowTime;
+    private String expectedReturnTime;
+    private String purpose;
+    private String status;
+    private String auditStatus;
+    private String auditUserName;
+    private String auditTime;
+    private String auditResult;
+    private String createTime;
+    
+    public Integer getId() { return id; }
+    public void setId(Integer id) { this.id = id; }
+    public String getEquipmentName() { return equipmentName; }
+    public void setEquipmentName(String equipmentName) { this.equipmentName = equipmentName; }
+    public String getEquipmentNumber() { return equipmentNumber; }
+    public void setEquipmentNumber(String equipmentNumber) { this.equipmentNumber = equipmentNumber; }
+    public String getEquipmentModel() { return equipmentModel; }
+    public void setEquipmentModel(String equipmentModel) { this.equipmentModel = equipmentModel; }
+    public String getUserName() { return userName; }
+    public void setUserName(String userName) { this.userName = userName; }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    public Integer getBorrowQuantity() { return borrowQuantity; }
+    public void setBorrowQuantity(Integer borrowQuantity) { this.borrowQuantity = borrowQuantity; }
+    public String getBorrowTime() { return borrowTime; }
+    public void setBorrowTime(String borrowTime) { this.borrowTime = borrowTime; }
+    public String getExpectedReturnTime() { return expectedReturnTime; }
+    public void setExpectedReturnTime(String expectedReturnTime) { this.expectedReturnTime = expectedReturnTime; }
+    public String getPurpose() { return purpose; }
+    public void setPurpose(String purpose) { this.purpose = purpose; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getAuditStatus() { return auditStatus; }
+    public void setAuditStatus(String auditStatus) { this.auditStatus = auditStatus; }
+    public String getAuditUserName() { return auditUserName; }
+    public void setAuditUserName(String auditUserName) { this.auditUserName = auditUserName; }
+    public String getAuditTime() { return auditTime; }
+    public void setAuditTime(String auditTime) { this.auditTime = auditTime; }
+    public String getAuditResult() { return auditResult; }
+    public void setAuditResult(String auditResult) { this.auditResult = auditResult; }
+    public String getCreateTime() { return createTime; }
+    public void setCreateTime(String createTime) { this.createTime = createTime; }
 }

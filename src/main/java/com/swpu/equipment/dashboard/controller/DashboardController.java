@@ -1,16 +1,25 @@
 package com.swpu.equipment.dashboard.controller;
 
+import com.alibaba.excel.EasyExcel;
 import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.dashboard.entity.*;
 import com.swpu.equipment.dashboard.service.DashboardService;
+import com.swpu.equipment.dashboard.export.DashboardExcelData;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+/**
+ * Dashboard controller providing statistical and status information
+ */
 @RestController
 @RequestMapping("/dashboard")
 public class DashboardController {
@@ -83,5 +92,27 @@ public class DashboardController {
             @RequestParam(required = false) String role) {
         RepairStatistics statistics = dashboardService.getRepairStatistics(equipmentType, equipmentId, userId, role);
         return Result.success(statistics);
+    }
+    
+    @GetMapping("/export")
+    public void exportDashboard(
+            @RequestParam(defaultValue = "all") String reportType,
+            @RequestParam(required = false) String equipmentType,
+            @RequestParam(required = false) Long equipmentId,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String role,
+            @RequestParam(defaultValue = "week") String period,
+            HttpServletResponse response) throws IOException {
+        
+        List<DashboardExcelData> dataList = dashboardService.getExportData(reportType, equipmentType, equipmentId, userId, role, period);
+        
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String fileName = "数据统计报表_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        response.setHeader("Content-disposition", "attachment;filename=" + fileName + ".xlsx");
+        
+        EasyExcel.write(response.getOutputStream(), DashboardExcelData.class)
+                .sheet("数据统计")
+                .doWrite(dataList);
     }
 }

@@ -17,6 +17,8 @@ public interface EquipmentMapper extends BaseMapper<Equipment> {
     
     EquipmentVO getEquipmentById(@Param("id") Long id);
     
+    EquipmentVO getEquipmentByNumber(@Param("equipmentNumber") String equipmentNumber);
+    
     List<String> getEquipmentTypes();
     
     /**

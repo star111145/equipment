@@ -33,5 +33,7 @@ public interface EquipmentReservationService extends IService<EquipmentReservati
     
     boolean hasOverdueBorrow(Long userId);
     
-    List<EquipmentReservationVO> getReservationsForCalendar(Long equipmentId, LocalDateTime start, LocalDateTime end);
+    List<EquipmentReservationVO> getReservationsForCalendar(Long equipmentId, Long equipmentTypeId, LocalDateTime start, LocalDateTime end);
+    
+    List<EquipmentReservationVO> getExportList(String keyword, Integer status, Integer auditStatus, Boolean exportAll, Integer current, Integer size);
 }

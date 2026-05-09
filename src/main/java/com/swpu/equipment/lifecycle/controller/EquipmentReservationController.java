@@ -1,8 +1,10 @@
 package com.swpu.equipment.lifecycle.controller;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.swpu.equipment.common.util.Result;
+import com.swpu.equipment.common.util.ReservationValidator;
 import com.swpu.equipment.common.util.TokenUtil;
 import com.swpu.equipment.common.websocket.WebSocketHandler;
 import com.swpu.equipment.lifecycle.entity.EquipmentReservation;
@@ -11,21 +13,31 @@ import com.swpu.equipment.lifecycle.service.EquipmentReservationService;
 import com.swpu.equipment.user.entity.User;
 import com.swpu.equipment.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @RestController
 @RequestMapping("/lifecycle/reserve")
 public class EquipmentReservationController {
     
+    private static final Logger log = LoggerFactory.getLogger(EquipmentReservationController.class);
+    
     @Autowired
     private EquipmentReservationService reservationService;
     
     @Autowired
     private TokenUtil tokenUtil;
+    
+    @Autowired
+    private ReservationValidator reservationValidator;
     
     @Autowired
     private UserService userService;
@@ -112,6 +124,15 @@ public class EquipmentReservationController {
         Long userId = tokenUtil.getUserIdFromToken(token);
         if (userId == null) {
             return Result.error("未登录");
+        }
+        
+        // 验证预约时间和时长
+        String validationError = reservationValidator.validateReservation(
+            reservation.getReserveTime(), 
+            reservation.getReserveDuration()
+        );
+        if (validationError != null) {
+            return Result.error(validationError);
         }
         
         reservation.setUserId(userId);
@@ -247,6 +268,15 @@ public class EquipmentReservationController {
             return Result.error("只有待审核的预约可以修改");
         }
         
+        // 验证预约时间和时长
+        String validationError = reservationValidator.validateReservation(
+            reservation.getReserveTime(), 
+            reservation.getReserveDuration()
+        );
+        if (validationError != null) {
+            return Result.error(validationError);
+        }
+        
         reservation.setId(id);
         reservation.setUpdateTime(java.time.LocalDateTime.now());
         boolean updated = reservationService.updateReservation(reservation);
@@ -283,6 +313,12 @@ public class EquipmentReservationController {
         
         if (original.getReserveStatus() != 1 || original.getAuditStatus() != 1) {
             return Result.error("只有已通过的预约可以申请延期");
+        }
+        
+        // 验证延期时长
+        int maxDuration = reservationValidator.getMaxDurationHours();
+        if (newReserveDuration > maxDuration) {
+            return Result.error("单次预约时长不能超过" + maxDuration + "小时");
         }
         
         LocalDateTime newReserveTime = original.getReserveTime().plusHours(original.getReserveDuration());
@@ -330,10 +366,31 @@ public class EquipmentReservationController {
         String token = request.getHeader("Authorization");
         Long auditUserId = tokenUtil.getUserIdFromToken(token);
         
+        EquipmentReservation reservation = reservationService.getById(id);
+        if (reservation == null) {
+            return Result.error("预约记录不存在");
+        }
+        
+        if (reservation.getAuditStatus() != 0) {
+            return Result.error("该预约已审核，不能重复审核");
+        }
+        
+        if (reservationValidator.isReviewTimeoutEnabled()) {
+            int timeoutHours = reservationValidator.getReviewTimeoutHours();
+            LocalDateTime createTime = reservation.getCreateTime();
+            LocalDateTime now = LocalDateTime.now();
+            long hoursElapsed = java.time.Duration.between(createTime, now).toHours();
+            
+            if (hoursElapsed > timeoutHours) {
+                log.warn("预约审核超时：预约ID={}, 设备名称={}, 等待审核时长={}小时, 规定时限={}小时", 
+                    id, reservation.getEquipmentName(), hoursElapsed, timeoutHours);
+            }
+        }
+        
         try {
             boolean approved = reservationService.approveReservation(id, auditUserId, comment, status);
             if (approved) {
-                EquipmentReservation reservation = reservationService.getById(id);
+                reservation = reservationService.getById(id);
                 String statusText = status == 1 ? "已通过" : "已拒绝";
                 String msg = "{\"type\":\"reservation_refresh\",\"message\":\"您的预约" 
                     + reservation.getEquipmentName() + "已被" + statusText + "\"}";
@@ -359,10 +416,137 @@ public class EquipmentReservationController {
     
     @GetMapping("/calendar")
     public Result<List<EquipmentReservationVO>> getCalendarReservations(
-            @RequestParam Long equipmentId,
+            @RequestParam(required = false) Long equipmentId,
+            @RequestParam(required = false) Long equipmentTypeId,
             @RequestParam LocalDateTime start,
             @RequestParam LocalDateTime end) {
-        List<EquipmentReservationVO> reservations = reservationService.getReservationsForCalendar(equipmentId, start, end);
+        List<EquipmentReservationVO> reservations = reservationService.getReservationsForCalendar(equipmentId, equipmentTypeId, start, end);
         return Result.success(reservations);
     }
+    
+    @GetMapping("/export")
+    public void exportReservation(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) Integer auditStatus,
+            @RequestParam(defaultValue = "false") Boolean exportAll,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size,
+            HttpServletResponse response) throws IOException {
+        List<EquipmentReservationVO> dataList = reservationService.getExportList(keyword, status, auditStatus, exportAll, current, size);
+        
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String fileName = "预约记录_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        response.setHeader("Content-disposition", "attachment;filename=" + fileName + ".xlsx");
+        
+        EasyExcel.write(response.getOutputStream(), ReservationExcelData.class)
+                .sheet("预约记录")
+                .doWrite(dataList.stream().map(this::convertToExcelData).collect(java.util.stream.Collectors.toList()));
+    }
+    
+    private ReservationExcelData convertToExcelData(EquipmentReservationVO vo) {
+        ReservationExcelData data = new ReservationExcelData();
+        data.setId(vo.getId() != null ? vo.getId().intValue() : null);
+        data.setEquipmentName(vo.getEquipmentName());
+        data.setEquipmentNumber(vo.getEquipmentNumber());
+        data.setEquipmentModel(vo.getEquipmentModel());
+        data.setUserName(vo.getUserName());
+        data.setPhone(vo.getUserPhone());
+        data.setReserveTime(vo.getReserveTime() != null ? vo.getReserveTime().toString() : "");
+        data.setReserveDuration(vo.getReserveDuration());
+        data.setPurpose(vo.getPurpose());
+        data.setStatus(getStatusText(vo.getReserveStatus(), vo.getReserveTime(), vo.getReserveDuration()));
+        data.setAuditStatus(getAuditStatusText(vo.getAuditStatus()));
+        
+        String auditUserName = vo.getAuditUserName();
+        if ((auditUserName == null || auditUserName.isEmpty()) && vo.getAuditUserId() != null) {
+            User user = userService.getById(vo.getAuditUserId());
+            if (user != null) {
+                auditUserName = user.getRealName();
+            }
+        }
+        data.setAuditUserName(auditUserName);
+        
+        data.setAuditTime(vo.getAuditTime() != null ? vo.getAuditTime().toString() : "");
+        data.setAuditResult(vo.getAuditResult());
+        data.setCreateTime(vo.getCreateTime() != null ? vo.getCreateTime().toString() : "");
+        return data;
+    }
+    
+    private String getStatusText(Integer status, LocalDateTime reserveTime, Integer reserveDuration) {
+        if (status == null) return "";
+        if (status == 1 && reserveTime != null && reserveDuration != null) {
+            LocalDateTime endTime = reserveTime.plusHours(reserveDuration);
+            if (endTime.isBefore(LocalDateTime.now())) {
+                return "已过期";
+            }
+        }
+        switch (status) {
+            case 0: return "待审核";
+            case 1: return "已通过";
+            case 2: return "已拒绝";
+            case 3: return "已取消";
+            default: return "未知";
+        }
+    }
+    
+    private String getAuditStatusText(Integer status) {
+        if (status == null) return "";
+        switch (status) {
+            case 0: return "待审核";
+            case 1: return "已通过";
+            case 2: return "已拒绝";
+            default: return "未知";
+        }
+    }
+}
+
+class ReservationExcelData {
+    private Integer id;
+    private String equipmentName;
+    private String equipmentNumber;
+    private String equipmentModel;
+    private String userName;
+    private String phone;
+    private String reserveTime;
+    private Integer reserveDuration;
+    private String purpose;
+    private String status;
+    private String auditStatus;
+    private String auditUserName;
+    private String auditTime;
+    private String auditResult;
+    private String createTime;
+    
+    public Integer getId() { return id; }
+    public void setId(Integer id) { this.id = id; }
+    public String getEquipmentName() { return equipmentName; }
+    public void setEquipmentName(String equipmentName) { this.equipmentName = equipmentName; }
+    public String getEquipmentNumber() { return equipmentNumber; }
+    public void setEquipmentNumber(String equipmentNumber) { this.equipmentNumber = equipmentNumber; }
+    public String getEquipmentModel() { return equipmentModel; }
+    public void setEquipmentModel(String equipmentModel) { this.equipmentModel = equipmentModel; }
+    public String getUserName() { return userName; }
+    public void setUserName(String userName) { this.userName = userName; }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    public String getReserveTime() { return reserveTime; }
+    public void setReserveTime(String reserveTime) { this.reserveTime = reserveTime; }
+    public Integer getReserveDuration() { return reserveDuration; }
+    public void setReserveDuration(Integer reserveDuration) { this.reserveDuration = reserveDuration; }
+    public String getPurpose() { return purpose; }
+    public void setPurpose(String purpose) { this.purpose = purpose; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getAuditStatus() { return auditStatus; }
+    public void setAuditStatus(String auditStatus) { this.auditStatus = auditStatus; }
+    public String getAuditUserName() { return auditUserName; }
+    public void setAuditUserName(String auditUserName) { this.auditUserName = auditUserName; }
+    public String getAuditTime() { return auditTime; }
+    public void setAuditTime(String auditTime) { this.auditTime = auditTime; }
+    public String getAuditResult() { return auditResult; }
+    public void setAuditResult(String auditResult) { this.auditResult = auditResult; }
+    public String getCreateTime() { return createTime; }
+    public void setCreateTime(String createTime) { this.createTime = createTime; }
 }

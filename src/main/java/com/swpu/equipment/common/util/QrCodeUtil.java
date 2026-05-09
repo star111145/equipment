@@ -34,19 +34,23 @@ public class QrCodeUtil implements InitializingBean {
     
     @Override
     public void afterPropertiesSet() throws Exception {
-        qrCodeDir = uploadBaseDir + "/qrcode/";
-        // 确保目录存在
+        String baseDir = uploadBaseDir;
+        if (!new File(baseDir).isAbsolute()) {
+            baseDir = System.getProperty("user.dir") + "/" + baseDir;
+        }
+        qrCodeDir = baseDir + "/qrcode/";
         File dir = new File(qrCodeDir);
         if (!dir.exists()) {
             dir.mkdirs();
         }
+        System.out.println("二维码存储目录: " + qrCodeDir);
     }
 
     public static String generateQrCode(String content, String fileName) throws Exception {
         Path filePath = Paths.get(qrCodeDir + fileName + "." + IMAGE_FORMAT);
         
         if (Files.exists(filePath)) {
-            return "/uploads/qrcode/" + fileName + "." + IMAGE_FORMAT;
+            Files.delete(filePath);
         }
 
         Map<EncodeHintType, Object> hints = new HashMap<>();
@@ -70,6 +74,10 @@ public class QrCodeUtil implements InitializingBean {
         ImageIO.write(bufferedImage, IMAGE_FORMAT, new File(qrCodeDir + fileName + "." + IMAGE_FORMAT));
 
         return "/uploads/qrcode/" + fileName + "." + IMAGE_FORMAT;
+    }
+
+    public static String getQrCodeDir() {
+        return qrCodeDir;
     }
 
     public static boolean deleteQrCode(String fileName) {

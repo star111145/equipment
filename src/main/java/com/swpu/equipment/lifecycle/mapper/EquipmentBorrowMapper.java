@@ -7,7 +7,9 @@ import com.swpu.equipment.lifecycle.entity.EquipmentBorrow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Mapper
 public interface EquipmentBorrowMapper extends BaseMapper<EquipmentBorrow> {
@@ -71,6 +73,8 @@ public interface EquipmentBorrowMapper extends BaseMapper<EquipmentBorrow> {
     /**
      * 分页查询借用列表（带设备类型）
      */
-    IPage<EquipmentBorrow> getPageListWithType(Page<EquipmentBorrow> page, @Param("userId") Long userId, 
+    IPage<EquipmentBorrow> getPageListWithType(Page<EquipmentBorrow> page, @Param("userId") Long userId,
             @Param("status") Integer status, @Param("auditStatus") Integer auditStatus, @Param("keyword") String keyword);
+    
+    List<EquipmentBorrow> selectListWithDetails(@Param("equipmentIds") Set<Long> equipmentIds, @Param("userId") Long userId, @Param("startTime") LocalDateTime startTime);
 }

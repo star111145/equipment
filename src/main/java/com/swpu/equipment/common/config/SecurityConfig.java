@@ -2,6 +2,7 @@ package com.swpu.equipment.common.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -69,6 +70,8 @@ public class SecurityConfig {
                         .requestMatchers("/ws/**", "/api/ws/**").permitAll()
                         // 放行所有API接口（开发阶段）
                         .requestMatchers("/api/**").permitAll()
+                        // 放行OPTIONS请求（跨域预检）
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // 其他请求需要认证
                         .anyRequest().authenticated()
                 )

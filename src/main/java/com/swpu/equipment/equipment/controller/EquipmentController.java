@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.common.util.TokenUtil;
+import com.swpu.equipment.common.util.QrCodeUtil;
 import com.swpu.equipment.equipment.entity.Equipment;
 import com.swpu.equipment.equipment.entity.EquipmentVO;
 import com.swpu.equipment.equipment.export.EquipmentExcelData;
@@ -23,10 +24,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
+
 import java.io.IOException;
-import java.io.OutputStream;
+
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -51,6 +53,8 @@ public class EquipmentController {
     private TokenUtil tokenUtil;
     @Value("${upload.base-dir:src/main/resources/static/uploads}")
     private String uploadBaseDir;
+    @Value("${mobile.base-url:http://localhost:5173}")
+    private String mobileBaseDir;
 
     @GetMapping("/list")
     public Result<Page<EquipmentVO>> getEquipmentList(
@@ -71,24 +75,24 @@ public class EquipmentController {
             return;
         }
 
-        File file = new File(equipment.getQrcodeUrl());
+        String fileName = equipment.getQrcodeUrl().substring(equipment.getQrcodeUrl().lastIndexOf("/") + 1);
+        String qrCodeDir = QrCodeUtil.getQrCodeDir();
+        File file = new File(qrCodeDir, fileName);
         if (!file.exists()) {
+            System.out.println("二维码文件不存在: " + file.getAbsolutePath());
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
 
         response.setContentType("image/png");
-        response.setHeader("Content-Disposition", "attachment; filename=" + equipment.getEquipmentNumber() + ".png");
+        response.setHeader("Content-Transfer-Encoding", "binary");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + equipment.getEquipmentNumber() + ".png\"");
 
-        try (FileInputStream fis = new FileInputStream(file);
-             OutputStream os = response.getOutputStream()) {
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = fis.read(buffer)) != -1) {
-                os.write(buffer, 0, len);
-            }
-            os.flush();
+        try {
+            Files.copy(file.toPath(), response.getOutputStream());
+            response.getOutputStream().flush();
         } catch (IOException e) {
+            System.out.println("读取二维码文件失败: " + e.getMessage());
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
@@ -102,6 +106,15 @@ public class EquipmentController {
     @GetMapping("/{id}")
     public Result<EquipmentVO> getEquipmentById(@PathVariable Long id) {
         EquipmentVO equipment = equipmentService.getEquipmentById(id);
+        if (equipment == null) {
+            return Result.error("设备不存在");
+        }
+        return Result.success(equipment);
+    }
+
+    @GetMapping("/number/{equipmentNumber}")
+    public Result<EquipmentVO> getEquipmentByNumber(@PathVariable String equipmentNumber) {
+        EquipmentVO equipment = equipmentService.getEquipmentByNumber(equipmentNumber);
         if (equipment == null) {
             return Result.error("设备不存在");
         }
@@ -194,25 +207,52 @@ public class EquipmentController {
             return;
         }
 
-        File file = new File(equipment.getQrcodeUrl());
+        String fileName = equipment.getQrcodeUrl().substring(equipment.getQrcodeUrl().lastIndexOf("/") + 1);
+        String qrCodeDir = QrCodeUtil.getQrCodeDir();
+        File file = new File(qrCodeDir, fileName);
         if (!file.exists()) {
+            System.out.println("二维码文件不存在: " + file.getAbsolutePath());
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
 
         response.setContentType("image/png");
-        response.setHeader("Content-Disposition", "attachment; filename=" + equipmentNumber + ".png");
+        response.setHeader("Content-Transfer-Encoding", "binary");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + equipmentNumber + ".png\"");
 
-        try (FileInputStream fis = new FileInputStream(file);
-             OutputStream os = response.getOutputStream()) {
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = fis.read(buffer)) != -1) {
-                os.write(buffer, 0, len);
-            }
-            os.flush();
+        try {
+            Files.copy(file.toPath(), response.getOutputStream());
+            response.getOutputStream().flush();
         } catch (IOException e) {
+            System.out.println("读取二维码文件失败: " + e.getMessage());
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PostMapping("/{id}/regenerate-qrcode")
+    public Result<String> regenerateQrCode(@PathVariable Long id) {
+        Equipment equipment = equipmentService.getById(id);
+        if (equipment == null) {
+            return Result.error("设备不存在");
+        }
+        if (equipment.getEquipmentNumber() == null) {
+            return Result.error("设备编号不能为空");
+        }
+        
+        try {
+            String qrcodeContent = mobileBaseDir + "/mobile/device?equipmentNumber=" + equipment.getEquipmentNumber();
+            String qrcodeUrl = QrCodeUtil.generateQrCode(qrcodeContent, equipment.getEquipmentNumber());
+            
+            Equipment updateEquipment = new Equipment();
+            updateEquipment.setId(equipment.getId());
+            updateEquipment.setQrcodeUrl(qrcodeUrl);
+            updateEquipment.setQrcodeContent(qrcodeContent);
+            equipmentService.updateById(updateEquipment);
+            
+            return Result.success(qrcodeUrl);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("生成二维码失败: " + e.getMessage());
         }
     }
 
@@ -254,13 +294,19 @@ public class EquipmentController {
 
     @GetMapping("/export")
     @PreAuthorize("hasAuthority('admin')")
-    public ResponseEntity<byte[]> exportEquipment(@RequestParam(required = false) List<Long> equipmentIds) {
+    public ResponseEntity<byte[]> exportEquipment(
+            @RequestParam(required = false) List<Long> equipmentIds,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String equipmentType,
+            @RequestParam(defaultValue = "false") Boolean exportAll,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size) {
         try {
             List<EquipmentExcelData> dataList;
             if (equipmentIds != null && !equipmentIds.isEmpty()) {
                 dataList = equipmentService.exportSelectedEquipment(equipmentIds);
             } else {
-                dataList = equipmentService.exportEquipmentList();
+                dataList = equipmentService.exportEquipmentList(keyword, equipmentType, exportAll, current, size);
             }
             
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -274,8 +320,8 @@ public class EquipmentController {
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDispositionFormData("attachment", "equipment_list_" + 
-                    System.currentTimeMillis() + ".xlsx");
+            headers.setContentDispositionFormData("attachment", "设备信息_" + 
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + ".xlsx");
             
             return ResponseEntity.ok()
                     .headers(headers)

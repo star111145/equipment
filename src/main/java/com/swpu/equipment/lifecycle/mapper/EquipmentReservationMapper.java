@@ -27,6 +27,7 @@ public interface EquipmentReservationMapper extends BaseMapper<EquipmentReservat
     EquipmentReservationVO getReservationById(Long id);
     
     List<EquipmentReservationVO> getCalendarReservations(@Param("equipmentId") Long equipmentId,
+                                                          @Param("equipmentTypeId") Long equipmentTypeId,
                                                           @Param("start") LocalDateTime start,
                                                           @Param("end") LocalDateTime end);
 }

@@ -95,4 +95,55 @@
         AND audit_status = 0
     </select>
 
+    <select id="selectListWithDetails" resultMap="ReturnVOResultMap">
+        SELECT 
+            r.id,
+            r.borrow_id,
+            r.equipment_id,
+            r.equipment_number,
+            r.equipment_name,
+            r.equipment_model,
+            r.equipment_image,
+            r.equipment_type_id,
+            et.type_name AS equipment_type,
+            r.user_id,
+            u.real_name AS real_name,
+            u.phone AS phone,
+            r.return_status,
+            r.purpose,
+            r.return_quantity,
+            r.expected_return_time,
+            r.actual_return_time,
+            r.repair_quantity,
+            r.return_time,
+            r.audit_status,
+            r.audit_result,
+            r.audit_user_id,
+            au.real_name AS audit_user_name,
+            r.audit_time,
+            r.create_time,
+            r.update_time
+        FROM equipment_return r
+        LEFT JOIN equipment e ON r.equipment_id = e.id
+        LEFT JOIN equipment_type et ON e.equipment_type_id = et.id
+        LEFT JOIN sys_user u ON r.user_id = u.id
+        LEFT JOIN sys_user au ON r.audit_user_id = au.id
+        <where>
+            <if test="equipmentIds != null and equipmentIds.size() > 0">
+                AND r.equipment_id IN
+                <foreach collection="equipmentIds" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+            </if>
+            <if test="userId != null">
+                AND r.user_id = #{userId}
+            </if>
+            <if test="startTime != null">
+                AND r.create_time &gt;= #{startTime}
+            </if>
+        </where>
+        ORDER BY r.create_time DESC
+        LIMIT 1000
+    </select>
+
 </mapper>

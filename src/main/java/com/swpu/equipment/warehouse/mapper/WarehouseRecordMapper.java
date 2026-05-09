@@ -8,6 +8,8 @@ import com.swpu.equipment.warehouse.entity.WarehouseRecordVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 @Mapper
 public interface WarehouseRecordMapper extends BaseMapper<WarehouseRecord> {
     
@@ -15,6 +17,11 @@ public interface WarehouseRecordMapper extends BaseMapper<WarehouseRecord> {
             @Param("equipmentId") Long equipmentId, 
             @Param("warehouseId") Long warehouseId, 
             @Param("supplierId") Long supplierId, 
+            @Param("recordType") Integer recordType,
+            @Param("keyword") String keyword);
+    
+    List<WarehouseRecordVO> getRecordList(
+            @Param("warehouseId") Long warehouseId, 
             @Param("recordType") Integer recordType,
             @Param("keyword") String keyword);
 }

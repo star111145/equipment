@@ -1,15 +1,19 @@
 package com.swpu.equipment.user.controller;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.common.util.PasswordEncryptUtil;
+import com.swpu.equipment.common.util.PasswordValidator;
 import com.swpu.equipment.common.util.TokenUtil;
 import com.swpu.equipment.user.entity.User;
 import com.swpu.equipment.user.entity.UserProfileDTO;
 import com.swpu.equipment.user.entity.UserPasswordDTO;
+import com.swpu.equipment.user.export.UserExcelData;
 import com.swpu.equipment.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,9 +21,12 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,6 +43,8 @@ public class UserController {
     private TokenUtil tokenUtil;
     @Autowired
     private PasswordEncryptUtil passwordEncryptUtil;
+    @Autowired
+    private PasswordValidator passwordValidator;
     @Value("${upload.base-dir:src/main/resources/static/uploads}")
     private String uploadBaseDir;
 
@@ -156,6 +165,12 @@ public class UserController {
             return Result.error("原密码错误");
         }
         
+        // 验证新密码强度
+        String validationError = passwordValidator.validatePassword(passwordDTO.getNewPassword());
+        if (validationError != null) {
+            return Result.error(validationError);
+        }
+        
         // 设置新密码
         user.setPassword(passwordEncryptUtil.encrypt(passwordDTO.getNewPassword()));
         userService.updateById(user);
@@ -256,6 +271,13 @@ public class UserController {
         if (user == null) {
             return Result.error("用户不存在");
         }
+        
+        // 验证密码强度
+        String validationError = passwordValidator.validatePassword(passwordDTO.getNewPassword());
+        if (validationError != null) {
+            return Result.error(validationError);
+        }
+        
         user.setPassword(passwordEncryptUtil.encrypt(passwordDTO.getNewPassword()));
         boolean success = userService.updateById(user);
         return success ? Result.success() : Result.error("重置失败");
@@ -373,7 +395,67 @@ public class UserController {
 //        return passwordEncryptUtil.matches(raw, encoded);
 //    }
 
-
-
+    @GetMapping("/export")
+    @PreAuthorize("hasAuthority('admin')")
+    public void exportUser(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "false") Boolean exportAll,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size,
+            HttpServletResponse response) throws IOException {
+        List<User> userList = userService.list();
+        
+        if (keyword != null && !keyword.isEmpty()) {
+            userList = userList.stream()
+                .filter(u -> u.getUsername().contains(keyword) || 
+                           (u.getRealName() != null && u.getRealName().contains(keyword)))
+                .collect(Collectors.toList());
+        }
+        
+        if (exportAll == null) {
+            exportAll = false;
+        }
+        
+        if (!exportAll) {
+            int total = userList.size();
+            int fromIndex = (current - 1) * size;
+            int toIndex = Math.min(fromIndex + size, total);
+            if (fromIndex < total) {
+                userList = userList.subList(fromIndex, toIndex);
+            } else {
+                userList = List.of();
+            }
+        }
+        
+        List<UserExcelData> dataList = userList.stream().map(user -> {
+            UserExcelData data = new UserExcelData();
+            data.setUsername(user.getUsername());
+            data.setStudentId(user.getStudentId());
+            data.setRealName(user.getRealName());
+            data.setPhone(user.getPhone());
+            data.setEmail(user.getEmail());
+            data.setGender(user.getGender() != null && user.getGender() == 1 ? "男" : "女");
+            String roleText = "用户";
+            if (user.getRole() != null) {
+                if ("admin".equals(user.getRole().getValue())) {
+                    roleText = "管理员";
+                } else if ("teacher".equals(user.getRole().getValue())) {
+                    roleText = "教师";
+                } else if ("student".equals(user.getRole().getValue())) {
+                    roleText = "学生";
+                }
+            }
+            data.setRole(roleText);
+            data.setStatus(user.getStatus() != null && user.getStatus() == 1 ? "正常" : "禁用");
+            data.setCreateTime(user.getCreateTime() != null ? user.getCreateTime().toString() : "");
+            return data;
+        }).collect(Collectors.toList());
+        
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String fileName = "用户信息_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        response.setHeader("Content-Disposition", "attachment; filename=" + fileName + ".xlsx");
+        EasyExcel.write(response.getOutputStream(), UserExcelData.class).sheet("用户信息").doWrite(dataList);
+    }
 
 }

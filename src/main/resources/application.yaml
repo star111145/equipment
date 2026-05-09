@@ -2,6 +2,7 @@ server:
   port: 8100 # 后端服务端口，自定义
   servlet:
     context-path: /api # 接口前缀，后续前端请求统一加/api，便于跨域配置
+  address: 0.0.0.0 # 监听所有地址
 spring:
   application:
     name: equipment # 项目名，和Artifact一致
@@ -44,6 +45,10 @@ logging:
 # 文件上传配置
 upload:
   base-dir: src/main/resources/static/uploads
+
+# 前端移动端URL配置
+mobile:
+  base-url: http://10.29.80.192:8090
 
 # MyBatis-Plus核心配置（扫描XML+下划线转驼峰）
 mybatis-plus:

@@ -3,30 +3,30 @@ package com.swpu.equipment.common.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
 
 //跨域配置
 @Configuration
 public class CorsConfig {
+    
     @Bean
-    public CorsFilter corsFilter() {
+    public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Spring Boot 3 推荐用originPatterns，兼容所有前端域名
-       // config.addAllowedOriginPattern("*");
-        config.addAllowedOrigin("http://localhost:8090");//指定前端服务器地址
+        // 允许所有来源
+        config.addAllowedOriginPattern("*");
         // 允许所有请求方法（GET/POST/PUT/DELETE）
         config.addAllowedMethod("*");
         // 允许所有请求头
         config.addAllowedHeader("*");
-        // 允许携带Cookie（前端请求需配withCredentials: true）
-        config.setAllowCredentials(true);
+        // 不允许携带Cookie
+        config.setAllowCredentials(false);
         // 预检请求缓存时间（减少OPTIONS请求）
         config.setMaxAge(3600L);
 
-        // 匹配所有接口（包括/api前缀）
+        // 匹配所有接口
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", config);
-        return new CorsFilter(source);
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 }

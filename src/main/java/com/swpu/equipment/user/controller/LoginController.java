@@ -2,6 +2,7 @@ package com.swpu.equipment.user.controller;
 
 import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.common.util.TokenUtil;
+import com.swpu.equipment.common.util.LoginAttemptManager;
 import com.swpu.equipment.user.entity.User;
 import com.swpu.equipment.user.entity.UserLoginDTO;
 import com.swpu.equipment.user.service.UserService;
@@ -26,6 +27,9 @@ public class LoginController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private LoginAttemptManager loginAttemptManager;
+
     // 强制注入TokenUtil，若注入失败会直接报错（便于排查）
     @Autowired
     private TokenUtil tokenUtil;
@@ -35,7 +39,26 @@ public class LoginController {
     public Result<Map<String, Object>> login(
             @RequestBody UserLoginDTO loginDTO,
             HttpSession session) {
-        // 第一步：打印请求日志，确认请求到达Controller
+        // 先检查用户是否存在且未被禁用
+        try {
+            User checkUser = userService.getUserByIdentifier(loginDTO.getIdentifier());
+            if (checkUser == null) {
+                return Result.error(401, "用户不存在");
+            }
+            if (checkUser.getStatus() != 1) {
+                return Result.error(401, "账号已被禁用，请联系管理员");
+            }
+        } catch (Exception e) {
+            // 用户不存在的情况会在后续处理
+        }
+        
+        // 检查登录尝试次数
+        String attemptError = loginAttemptManager.checkLoginAttempt(loginDTO.getIdentifier());
+        if (attemptError != null) {
+            return Result.error(401, attemptError);
+        }
+        
+        // 打印请求日志，确认请求到达Controller
         log.info("接收到登录请求：identifier={}", loginDTO.getIdentifier());
         try {
             // 1. 调用Service校验数据库用户
@@ -59,13 +82,20 @@ public class LoginController {
 
             // 4. 存入Session
             session.setAttribute("loginUser", user);
+            
+            // 5. 记录登录成功，清除失败次数
+            loginAttemptManager.recordSuccess(loginDTO.getIdentifier());
 
             return Result.success(data);
         } catch (IllegalArgumentException e) {
             log.error("登录失败（业务异常）：{}", e.getMessage());
+            // 记录登录失败
+            loginAttemptManager.recordFailure(loginDTO.getIdentifier());
             return Result.error(401, e.getMessage());
         } catch (Exception e) {
             log.error("登录失败（系统异常）", e); // 打印完整异常堆栈
+            // 记录登录失败
+            loginAttemptManager.recordFailure(loginDTO.getIdentifier());
             return Result.error(500, "登录失败：" + e.getMessage());
         }
     }

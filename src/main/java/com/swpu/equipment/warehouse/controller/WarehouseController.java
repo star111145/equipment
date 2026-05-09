@@ -1,5 +1,6 @@
 package com.swpu.equipment.warehouse.controller;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -10,14 +11,21 @@ import com.swpu.equipment.warehouse.entity.Warehouse;
 import com.swpu.equipment.warehouse.entity.WarehouseRecord;
 import com.swpu.equipment.warehouse.entity.WarehouseRecordVO;
 import com.swpu.equipment.warehouse.entity.WarehouseVO;
+import com.swpu.equipment.warehouse.export.WarehouseExcelData;
+import com.swpu.equipment.warehouse.export.StockExcelData;
 import com.swpu.equipment.warehouse.service.WarehouseRecordService;
 import com.swpu.equipment.warehouse.service.WarehouseService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 @RestController
@@ -196,5 +204,120 @@ public class WarehouseController {
                 .orderByDesc(WarehouseRecord::getCreateTime);
         List<WarehouseRecord> list = warehouseRecordService.list(wrapper);
         return Result.success(list);
+    }
+
+    @DeleteMapping("/record/batch")
+    @PreAuthorize("hasAuthority('admin')")
+    public Result<Void> batchDeleteRecord(@RequestParam List<Long> ids) {
+        boolean success = warehouseRecordService.removeByIds(ids);
+        return success ? Result.success() : Result.error("删除失败");
+    }
+
+    @GetMapping("/export")
+    @PreAuthorize("hasAuthority('admin')")
+    public void exportWarehouse(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "false") Boolean exportAll,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size,
+            HttpServletResponse response) throws IOException {
+        List<Warehouse> warehouseList = warehouseService.list();
+        
+        if (keyword != null && !keyword.isEmpty()) {
+            warehouseList = warehouseList.stream()
+                .filter(w -> w.getWarehouseName().contains(keyword) || 
+                           (w.getWarehouseLocation() != null && w.getWarehouseLocation().contains(keyword)))
+                .collect(Collectors.toList());
+        }
+        
+        if (exportAll == null) {
+            exportAll = false;
+        }
+        
+        if (!exportAll) {
+            int total = warehouseList.size();
+            int fromIndex = (current - 1) * size;
+            int toIndex = Math.min(fromIndex + size, total);
+            if (fromIndex < total) {
+                warehouseList = warehouseList.subList(fromIndex, toIndex);
+            } else {
+                warehouseList = List.of();
+            }
+        }
+        
+        List<WarehouseExcelData> dataList = warehouseList.stream().map(warehouse -> {
+            WarehouseExcelData data = new WarehouseExcelData();
+            data.setWarehouseName(warehouse.getWarehouseName());
+            data.setWarehouseLocation(warehouse.getWarehouseLocation());
+            data.setWarehouseManagerName(warehouse.getWarehouseManagerName());
+            data.setPhone(warehouse.getPhone());
+            data.setDescription(warehouse.getDescription());
+            data.setCreateTime(warehouse.getCreateTime() != null ? warehouse.getCreateTime().toString() : "");
+            return data;
+        }).collect(Collectors.toList());
+        
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String fileName = "仓库信息_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        response.setHeader("Content-Disposition", "attachment; filename=" + fileName + ".xlsx");
+        EasyExcel.write(response.getOutputStream(), WarehouseExcelData.class).sheet("仓库信息").doWrite(dataList);
+    }
+
+    @GetMapping("/stock/export")
+    @PreAuthorize("hasAuthority('admin')")
+    public void exportStock(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "false") Boolean exportAll,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size,
+            HttpServletResponse response) throws IOException {
+        
+        Integer recordType = null;
+        if (type != null && !type.isEmpty()) {
+            if ("in".equals(type)) {
+                recordType = 1;
+            } else if ("out".equals(type)) {
+                recordType = 2;
+            }
+        }
+        
+        List<WarehouseRecordVO> recordList = warehouseRecordService.getRecordList(warehouseId, recordType, keyword);
+        
+        if (exportAll == null) {
+            exportAll = false;
+        }
+        
+        if (!exportAll) {
+            int total = recordList.size();
+            int fromIndex = (current - 1) * size;
+            int toIndex = Math.min(fromIndex + size, total);
+            if (fromIndex < total) {
+                recordList = recordList.subList(fromIndex, toIndex);
+            } else {
+                recordList = List.of();
+            }
+        }
+        
+        List<StockExcelData> dataList = recordList.stream().map(record -> {
+            StockExcelData data = new StockExcelData();
+            data.setWarehouseName(record.getWarehouseName());
+            data.setSupplierName(record.getSupplierName());
+            data.setEquipmentNumber(record.getEquipmentNumber());
+            data.setEquipmentName(record.getEquipmentName());
+            data.setTypeText(record.getTypeText());
+            data.setQuantity(record.getQuantity());
+            data.setOperatorName(record.getOperatorName());
+            data.setCreateTime(record.getCreateTime() != null ? record.getCreateTime().toString() : "");
+            data.setRemark(record.getRemark());
+            return data;
+        }).collect(Collectors.toList());
+        
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String fileName = "库存记录_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        response.setHeader("Content-Disposition", "attachment; filename=" + fileName + ".xlsx");
+        EasyExcel.write(response.getOutputStream(), StockExcelData.class).sheet("出入库记录").doWrite(dataList);
     }
 }

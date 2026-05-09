@@ -15,9 +15,13 @@ public interface EquipmentService extends IService<Equipment> {
     
     EquipmentVO getEquipmentById(Long id);
     
+    EquipmentVO getEquipmentByNumber(String equipmentNumber);
+    
     List<String> getEquipmentTypes();
     
     List<EquipmentExcelData> exportEquipmentList();
+    
+    List<EquipmentExcelData> exportEquipmentList(String keyword, String equipmentType, Boolean exportAll, Integer current, Integer size);
     
     List<EquipmentExcelData> exportSelectedEquipment(List<Long> equipmentIds);
     

@@ -1,15 +1,22 @@
 package com.swpu.equipment.supplier.controller;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.swpu.equipment.common.util.Result;
 import com.swpu.equipment.supplier.entity.Supplier;
+import com.swpu.equipment.supplier.export.SupplierExcelData;
 import com.swpu.equipment.supplier.service.SupplierService;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/supplier")
@@ -93,5 +100,56 @@ public class SupplierController {
     public Result<Void> batchDeleteSupplier(@RequestParam List<Long> ids) {
         boolean success = supplierService.removeByIds(ids);
         return success ? Result.success() : Result.error("删除失败");
+    }
+
+    @GetMapping("/export")
+    @PreAuthorize("hasAuthority('admin')")
+    public void exportSupplier(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "false") Boolean exportAll,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size,
+            HttpServletResponse response) throws IOException {
+        List<Supplier> supplierList = supplierService.list();
+        
+        if (keyword != null && !keyword.isEmpty()) {
+            supplierList = supplierList.stream()
+                .filter(s -> s.getSupplierName().contains(keyword) || 
+                           (s.getSupplierContact() != null && s.getSupplierContact().contains(keyword)))
+                .collect(Collectors.toList());
+        }
+        
+        if (exportAll == null) {
+            exportAll = false;
+        }
+        
+        if (!exportAll) {
+            int total = supplierList.size();
+            int fromIndex = (current - 1) * size;
+            int toIndex = Math.min(fromIndex + size, total);
+            if (fromIndex < total) {
+                supplierList = supplierList.subList(fromIndex, toIndex);
+            } else {
+                supplierList = List.of();
+            }
+        }
+        
+        List<SupplierExcelData> dataList = supplierList.stream().map(supplier -> {
+            SupplierExcelData data = new SupplierExcelData();
+            data.setSupplierName(supplier.getSupplierName());
+            data.setSupplierContact(supplier.getSupplierContact());
+            data.setPhone(supplier.getPhone());
+            data.setEmail(supplier.getEmail());
+            data.setAddress(supplier.getAddress());
+            data.setDescription(supplier.getDescription());
+            data.setCreateTime(supplier.getCreateTime() != null ? supplier.getCreateTime().toString() : "");
+            return data;
+        }).collect(Collectors.toList());
+        
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String fileName = "供应商信息_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        response.setHeader("Content-Disposition", "attachment; filename=" + fileName + ".xlsx");
+        EasyExcel.write(response.getOutputStream(), SupplierExcelData.class).sheet("供应商信息").doWrite(dataList);
     }
 }
