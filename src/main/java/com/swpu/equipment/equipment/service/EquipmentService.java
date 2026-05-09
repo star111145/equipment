@@ -21,6 +21,8 @@ public interface EquipmentService extends IService<Equipment> {
     
     List<EquipmentExcelData> exportEquipmentList();
     
+    String getMaxEquipmentNumber();
+    
     List<EquipmentExcelData> exportEquipmentList(String keyword, String equipmentType, Boolean exportAll, Integer current, Integer size);
     
     List<EquipmentExcelData> exportSelectedEquipment(List<Long> equipmentIds);

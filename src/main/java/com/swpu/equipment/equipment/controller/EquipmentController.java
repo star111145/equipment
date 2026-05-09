@@ -50,6 +50,8 @@ public class EquipmentController {
     @Autowired
     private EquipmentBorrowService equipmentBorrowService;
     @Autowired
+    private com.swpu.equipment.warehouse.service.WarehouseRecordService warehouseRecordService;
+    @Autowired
     private TokenUtil tokenUtil;
     @Value("${upload.base-dir:src/main/resources/static/uploads}")
     private String uploadBaseDir;
@@ -119,6 +121,75 @@ public class EquipmentController {
             return Result.error("设备不存在");
         }
         return Result.success(equipment);
+    }
+
+    @PostMapping
+    @PreAuthorize("hasAuthority('admin')")
+    public Result<String> addEquipment(@RequestBody Equipment equipment, HttpServletRequest request) {
+        String token = request.getHeader("Authorization");
+        Long userId = tokenUtil.getUserIdFromToken(token);
+        
+        if (equipment.getEquipmentName() == null || equipment.getEquipmentName().isEmpty()) {
+            return Result.error("设备名称不能为空");
+        }
+        if (equipment.getEquipmentTypeId() == null) {
+            return Result.error("设备类型不能为空");
+        }
+        
+        // 设备编号：用户输入数字，自动加 EQ 前缀
+        String numberStr = equipment.getEquipmentNumber();
+        if (numberStr == null || numberStr.trim().isEmpty()) {
+            return Result.error("设备编号不能为空");
+        }
+        numberStr = numberStr.trim();
+        // 如果用户输入了完整编号（含EQ前缀），提取数字部分
+        if (numberStr.toUpperCase().startsWith("EQ")) {
+            numberStr = numberStr.substring(2);
+        }
+        // 验证是否为纯数字
+        if (!numberStr.matches("\\d+")) {
+            return Result.error("设备编号必须为数字");
+        }
+        String equipmentNumber = "EQ" + numberStr;
+        equipment.setEquipmentNumber(equipmentNumber);
+        
+        // 检查设备编号是否已存在
+        Equipment existEquipment = equipmentService.getOne(
+            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Equipment>()
+                .eq(Equipment::getEquipmentNumber, equipmentNumber)
+        );
+        if (existEquipment != null) {
+            return Result.error("设备编号已存在");
+        }
+        
+        // 设置初始值
+        if (equipment.getStockQuantity() == null) {
+            equipment.setStockQuantity(0);
+        }
+        if (equipment.getEquipmentStatus() == null) {
+            equipment.setEquipmentStatus(1);
+        }
+        // 可用数量初始等于库存数量
+        equipment.setAvailableQuantity(equipment.getStockQuantity());
+        
+        boolean saved = equipmentService.save(equipment);
+        if (saved) {
+            // 如果库存数量大于0，自动创建入库记录
+            if (equipment.getStockQuantity() > 0) {
+                com.swpu.equipment.warehouse.entity.WarehouseRecord record = new com.swpu.equipment.warehouse.entity.WarehouseRecord();
+                record.setEquipmentId(equipment.getId());
+                record.setWarehouseId(equipment.getWarehouseId());
+                record.setSupplierId(equipment.getSupplierId());
+                record.setRecordType(1);
+                record.setQuantity(equipment.getStockQuantity());
+                record.setOperatorId(userId);
+                record.setRemark("新增设备自动入库");
+                warehouseRecordService.save(record);
+            }
+            return Result.success("添加设备成功");
+        } else {
+            return Result.error("添加设备失败");
+        }
     }
 
     @PutMapping("/{id}")

@@ -14,6 +14,7 @@
         <result property="recordType" column="record_type"/>
         <result property="typeText" column="type_text"/>
         <result property="quantity" column="quantity"/>
+        <result property="stockQuantity" column="stock_quantity"/>
         <result property="operatorId" column="operator_id"/>
         <result property="operatorName" column="operator_name"/>
         <result property="remark" column="remark"/>
@@ -37,6 +38,7 @@
                 ELSE ''
             END AS type_text,
             wr.quantity,
+            SUM(CASE WHEN sub.record_type = 1 THEN sub.quantity ELSE -sub.quantity END) AS stock_quantity,
             wr.operator_id,
             u.real_name AS operator_name,
             wr.remark,
@@ -46,6 +48,7 @@
         LEFT JOIN warehouse w ON wr.warehouse_id = w.id
         LEFT JOIN supplier s ON wr.supplier_id = s.id
         LEFT JOIN sys_user u ON wr.operator_id = u.id
+        LEFT JOIN warehouse_record sub ON sub.equipment_id = wr.equipment_id AND sub.create_time &lt;= wr.create_time
         <where>
             <if test="equipmentId != null">
                 AND wr.equipment_id = #{equipmentId}
@@ -64,6 +67,7 @@
                      OR e.equipment_number LIKE CONCAT('%', #{keyword}, '%'))
             </if>
         </where>
+        GROUP BY wr.id, wr.equipment_id, e.equipment_number, e.equipment_name, wr.warehouse_id, w.warehouse_name, wr.supplier_id, s.supplier_name, wr.record_type, wr.quantity, wr.operator_id, u.real_name, wr.remark, wr.create_time
         ORDER BY wr.create_time DESC
     </select>
 
@@ -84,6 +88,7 @@
                 ELSE ''
             END AS type_text,
             wr.quantity,
+            SUM(CASE WHEN sub.record_type = 1 THEN sub.quantity ELSE -sub.quantity END) AS stock_quantity,
             wr.operator_id,
             u.real_name AS operator_name,
             wr.remark,
@@ -93,6 +98,7 @@
         LEFT JOIN warehouse w ON wr.warehouse_id = w.id
         LEFT JOIN supplier s ON wr.supplier_id = s.id
         LEFT JOIN sys_user u ON wr.operator_id = u.id
+        LEFT JOIN warehouse_record sub ON sub.equipment_id = wr.equipment_id AND sub.create_time &lt;= wr.create_time
         <where>
             <if test="warehouseId != null">
                 AND wr.warehouse_id = #{warehouseId}
@@ -100,11 +106,15 @@
             <if test="recordType != null">
                 AND wr.record_type = #{recordType}
             </if>
+            <if test="equipmentId != null">
+                AND wr.equipment_id = #{equipmentId}
+            </if>
             <if test="keyword != null and keyword != ''">
                 AND (e.equipment_name LIKE CONCAT('%', #{keyword}, '%')
                      OR e.equipment_number LIKE CONCAT('%', #{keyword}, '%'))
             </if>
         </where>
+        GROUP BY wr.id, wr.equipment_id, e.equipment_number, e.equipment_name, wr.warehouse_id, w.warehouse_name, wr.supplier_id, s.supplier_name, wr.record_type, wr.quantity, wr.operator_id, u.real_name, wr.remark, wr.create_time
         ORDER BY wr.create_time DESC
     </select>
 

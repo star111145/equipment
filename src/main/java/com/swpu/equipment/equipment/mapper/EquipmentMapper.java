@@ -21,6 +21,8 @@ public interface EquipmentMapper extends BaseMapper<Equipment> {
     
     List<String> getEquipmentTypes();
     
+    String getMaxEquipmentNumber();
+    
     /**
      * 获取设备的借用数量（已借出状态）
      */

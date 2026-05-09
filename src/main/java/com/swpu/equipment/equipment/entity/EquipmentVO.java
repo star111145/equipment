@@ -12,6 +12,7 @@ public class EquipmentVO {
     private Long equipmentTypeId;
     private Integer equipmentStatus;
     private String equipmentLocation;
+    private Long warehouseId;
     private Integer stockQuantity;
     private Integer availableQuantity;
     private Integer borrowQuantity;
@@ -19,6 +20,8 @@ public class EquipmentVO {
     private Integer reserveQuantity;
     private String description;
     private String supplier;
+    private Long supplierId;
     private String equipmentImage;
     private String qrcodeUrl;
+    private Boolean isListed;
 }

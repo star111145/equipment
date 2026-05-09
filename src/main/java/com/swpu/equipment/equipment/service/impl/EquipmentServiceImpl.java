@@ -127,6 +127,11 @@ public class EquipmentServiceImpl extends ServiceImpl<EquipmentMapper, Equipment
     public List<EquipmentExcelData> exportEquipmentList() {
         return exportEquipmentList(null, null, false, 1, Integer.MAX_VALUE);
     }
+
+    @Override
+    public String getMaxEquipmentNumber() {
+        return baseMapper.getMaxEquipmentNumber();
+    }
     
     @Override
     public List<EquipmentExcelData> exportEquipmentList(String keyword, String equipmentType, Boolean exportAll, Integer current, Integer size) {

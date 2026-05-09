@@ -16,6 +16,7 @@ public class WarehouseRecordVO {
     private Integer recordType;
     private String typeText;
     private Integer quantity;
+    private Integer stockQuantity;
     private Long operatorId;
     private String operatorName;
     private String remark;
